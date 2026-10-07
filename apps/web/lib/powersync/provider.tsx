@@ -63,7 +63,9 @@ export function PowerSyncProvider({ children, fallback }: { children: ReactNode;
         await ensureDefaultCategories(instance, userId).catch(() => 0)
       }
       // Development only: `?demo=1` fills an empty database with sample data for reviewing screens.
+      // With sync on, wait for the download first so a fresh browser doesn't seed the account twice.
       if (process.env.NODE_ENV === 'development' && new URLSearchParams(window.location.search).get('demo') === '1') {
+        if (connector.syncEnabled) await instance.waitForFirstSync()
         await seedDemoData(instance, userId, localDate(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)).catch((e) => console.warn('demo seed failed', e))
       }
       setReady({ db: instance, userId })
