@@ -13,7 +13,8 @@ Supabase Postgres. Until PowerSync is configured the apps still work, but data s
 2. **Create a PowerSync Cloud instance** at https://powersync.com (free tier is enough) and connect it
    to the Supabase project `qopvfcrjpdlsnwughqlx` using the *direct* connection string with
    `powersync_role`.
-3. **Client auth** — in the instance's *Client Auth* settings enable "Use Supabase Auth" (JWKS from
-   `https://qopvfcrjpdlsnwughqlx.supabase.co/auth/v1/.well-known/jwks.json`).
-4. **Sync rules** — paste `powersync/sync-rules.yaml` and deploy.
+3. **Client auth** — in the instance's *Client Auth* settings enable "Use Supabase Auth", set the JWKS URI
+   to `https://qopvfcrjpdlsnwughqlx.supabase.co/auth/v1/.well-known/jwks.json`, and add `authenticated`
+   under *JWT Audience* (Supabase's `aud` claim; without it every sync request fails with 401 PSYNC_S2105).
+4. **Sync rules** — paste `powersync/sync-rules.yaml` into *Sync Rules*, Validate, and Deploy.
 5. Put the instance URL in `NEXT_PUBLIC_POWERSYNC_URL` (web) and `EXPO_PUBLIC_POWERSYNC_URL` (mobile).
