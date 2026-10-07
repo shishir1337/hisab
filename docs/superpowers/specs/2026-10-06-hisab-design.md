@@ -2,7 +2,7 @@
 
 - **Date:** 2026-10-06
 - **Status:** Approved in brainstorming, pending written-spec review
-- **Platforms:** Mobile (iOS + Android, Expo / React Native) and Web (Next.js)
+- **Platforms:** Android (Expo / React Native, installed as APK via EAS — no iOS: no Apple Developer account) and Web (Next.js)
 
 ---
 
@@ -285,7 +285,7 @@ Let `paid = installments_paid_before + count(emi transactions for loan)`.
 - **Settings:**
   - Profile, accounts (reorder and archive), categories, base currency, number grouping, theme, nudge time, lending reminder interval, app lock and hide amounts.
   - Monthly report, export (CSV/PDF), unsynced issues, sign out, delete account.
-- **Monthly report:** income by source (party), spending by category (bar list), EMIs paid, lending in and out, net and savings rate, and a comparison with last month. Exported to PDF via `expo-print` (mobile) and server-rendered printable HTML (web).
+- **Monthly report:** income by source (party), spending by category (bar list), EMIs paid, lending in and out, net and savings rate, and a comparison with last month. Exported to PDF via `expo-print` (Android) and server-rendered printable HTML (web).
 - **Onboarding (target under 2 minutes):** sign in → base currency (BDT preselected) → accounts with current balances → *optional:* running loans (with EMIs already paid) → *optional:* people who owe you or whom you owe → Home.
 - **Empty states:** each one has a single clear next action (for example "Log your first expense" opens the sheet). No illustrations.
 
@@ -302,7 +302,7 @@ Let `paid = installments_paid_before + count(emi transactions for loan)`.
 ---
 
 ## 8. Auth and security
-- **Supabase Auth:** email one-time code, Google, and Sign in with Apple (required by App Store rules when Google is offered).
+- **Supabase Auth:** email one-time code, plus Google. (No Sign in with Apple — iOS is out of scope.)
 - **Sessions:** stored in `expo-secure-store` on mobile and in httpOnly cookies on web (Supabase SSR helpers).
 - **Optional biometric app lock** (`expo-local-authentication`) when the app opens or resumes after 1 minute in the background.
 - **Hide amounts:** tap the hero card to blur amounts throughout the app. The setting persists.
