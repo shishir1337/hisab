@@ -93,3 +93,46 @@ export const partyInput = z.object({
   note: z.string().max(500).nullish(),
 })
 export type PartyInput = z.infer<typeof partyInput>
+
+export const recurringRuleInput = z
+  .object({
+    type: z.enum(['income', 'expense', 'transfer']),
+    amount_minor: amount,
+    account_id: id,
+    to_account_id: id.nullish(),
+    category_id: id.nullish(),
+    party_id: id.nullish(),
+    note: z.string().max(500).nullish(),
+    frequency: z.enum(['weekly', 'monthly', 'yearly']),
+    interval: z.number().int().min(1).max(52).default(1),
+    anchor_date: isoDate,
+    end_date: isoDate.nullish(),
+    mode: z.enum(['confirm', 'auto']).default('confirm'),
+    /** Local creation day; occurrences before it are never due. Defaults to today. */
+    created_on: isoDate.optional(),
+  })
+  .superRefine((r, ctx) => {
+    const add = (path: string, message: string) => ctx.addIssue({ code: 'custom', path: [path], message })
+    if ((r.type === 'transfer') !== Boolean(r.to_account_id)) add('to_account_id', r.type === 'transfer' ? 'Pick the account to move money to' : 'Only transfers have a target')
+    if (r.type === 'transfer' && r.to_account_id === r.account_id) add('to_account_id', 'Pick a different account')
+    if (r.type !== 'transfer' && !r.category_id) add('category_id', 'Pick a category')
+    if (r.end_date && r.end_date < r.anchor_date) add('end_date', 'End date is before the first date')
+  })
+export type RecurringRuleInput = z.input<typeof recurringRuleInput>
+
+export const loanInput = z
+  .object({
+    name: z.string().trim().min(1, 'Required').max(60),
+    party_id: id.nullish(),
+    emi_amount_minor: amount,
+    total_installments: z.number().int().min(1).max(600),
+    first_due_date: isoDate,
+    installments_paid_before: z.number().int().min(0).default(0),
+    default_account_id: id.nullish(),
+    note: z.string().max(500).nullish(),
+  })
+  .refine((l) => l.installments_paid_before <= l.total_installments, {
+    path: ['installments_paid_before'],
+    message: 'More EMIs paid than the loan has',
+  })
+export type LoanInput = z.input<typeof loanInput>
