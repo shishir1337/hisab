@@ -57,6 +57,9 @@ function RootStack() {
           <Stack.Screen name="budget" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="due" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="loan" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="person" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="lend" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="repay" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         </Stack.Protected>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="sign-in" />

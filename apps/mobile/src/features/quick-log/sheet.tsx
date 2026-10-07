@@ -15,6 +15,7 @@ import { usePowerSync, useQuery } from '@powersync/react'
 import * as Haptics from 'expo-haptics'
 import { Calendar, ChevronLeft, ChevronRight, Globe, Plus, StickyNote, Trash2, User, Wallet, X } from 'lucide-react-native'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { router } from 'expo-router'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import { Button } from '@/components/button'
 import { Chip } from '@/components/chip'
@@ -196,14 +197,20 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
 
   return (
     <View className="gap-3 pt-1">
-      <Segmented<QuickLogType>
+      <Segmented<QuickLogType | 'lend'>
         value={form.type}
         options={[
           { value: 'expense', label: 'Expense' },
           { value: 'income', label: 'Income' },
           { value: 'transfer', label: 'Transfer' },
+          ...(editing ? [] : [{ value: 'lend' as const, label: 'Lend' }]),
         ]}
         onChange={(v) => {
+          if (v === 'lend') {
+            onDone()
+            router.push('/lend')
+            return
+          }
           dispatch({ type: 'setType', value: v, otherAccountId: accounts.find((a) => a.id !== form.accountId)?.id ?? null })
           setPanel('none')
           setHint(null)

@@ -1,5 +1,5 @@
 import { addDays, balanceSeries, loanProgress } from '@hisab/core'
-import { Q, QP, type LoanWithPayments, type TransactionView } from '@hisab/db'
+import { Q, QL, QP, type LoanWithPayments, type TransactionView } from '@hisab/db'
 import { useQuery } from '@powersync/react'
 import { router } from 'expo-router'
 import { Wallet } from 'lucide-react-native'
@@ -34,6 +34,7 @@ export default function HomeScreen() {
 
   const due = useDueItems(today, timeZone)
   const { data: loans } = useQuery<LoanWithPayments>(QP.loansWithPayments)
+  const { data: lendingTotals } = useQuery<{ owed_to_me: number; i_owe: number }>(QL.lendingTotals)
   const loansLeft = loans.reduce((sum, l) => sum + loanProgress(l, l.paid_count, l.paid_amount, today).remainingAmount, 0)
   const total = totalRows[0]?.total ?? 0
   const series = useMemo(() => balanceSeries(total, net, today, TREND_DAYS).map((p) => p.balance), [total, net, today])
@@ -44,7 +45,7 @@ export default function HomeScreen() {
       {!isLoading && accounts.length === 0 ? (
         <FirstAccount />
       ) : (
-        <HeroCard total={total} series={series} owedToYou={0} loansLeft={loansLeft} currency={currency} grouping={grouping} />
+        <HeroCard total={total} series={series} owedToYou={lendingTotals[0]?.owed_to_me ?? 0} loansLeft={loansLeft} currency={currency} grouping={grouping} />
       )}
 
       <DueStrip items={due} today={today} />
