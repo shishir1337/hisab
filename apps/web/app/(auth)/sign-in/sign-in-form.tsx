@@ -18,12 +18,17 @@ export function SignInForm() {
   const router = useRouter()
   const next = useSearchParams().get('next')
   const codeRef = useRef<HTMLInputElement>(null)
+  const linkFailed = useSearchParams().get('error') === 'link'
 
   // Side effects driven by the reducer's status.
   useEffect(() => {
     if (state.status === 'sending') {
       getSupabase()
-        .auth.signInWithOtp({ email: state.email, options: { shouldCreateUser: true } })
+        .auth.signInWithOtp({
+          email: state.email,
+          // If the email contains a link instead of a code, the link finishes sign-in here.
+          options: { shouldCreateUser: true, emailRedirectTo: `${window.location.origin}/auth/callback${next ? `?next=${encodeURIComponent(safeNextPath(next))}` : ''}` },
+        })
         .then(({ error }) => {
           if (error) dispatch({ type: 'sendFailed', error: friendlyError(error.message) })
           else {
@@ -40,7 +45,7 @@ export function SignInForm() {
           else dispatch({ type: 'verified' })
         })
     }
-  }, [state.status, state.email, state.code])
+  }, [state.status, state.email, state.code, next])
 
   useEffect(() => {
     if (state.step === 'done') {
@@ -93,7 +98,7 @@ export function SignInForm() {
           aria-describedby={state.error ? 'email-error' : undefined}
           onChange={(e) => dispatch({ type: 'setEmail', email: e.target.value })}
         />
-        <FieldError id="email-error" message={state.error} />
+        <FieldError id="email-error" message={state.error ?? (linkFailed ? 'That sign-in link expired or was already used. Send a new one.' : null)} />
         <Button type="submit" size="lg" className="mt-6 w-full" disabled={state.status !== 'idle'}>
           {state.status === 'sending' ? <Loader2 className="animate-spin" /> : 'Continue'}
         </Button>
@@ -119,7 +124,8 @@ export function SignInForm() {
       </button>
       <h1 className="text-[26px] font-semibold tracking-tight">Check your email</h1>
       <p className="mt-1.5 text-[15px] text-text-muted">
-        Enter the code we sent to <span className="font-medium text-text">{state.email}</span>
+        Enter the code we sent to <span className="font-medium text-text">{state.email}</span>, or open the link in that
+        email on this device.
       </p>
 
       <div className="relative mt-8" onClick={() => codeRef.current?.focus()}>

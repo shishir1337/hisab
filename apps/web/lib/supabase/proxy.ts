@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/sign-in']
+const PUBLIC_PATHS = ['/sign-in', '/auth']
 
 /**
  * Refreshes the Supabase session cookie and performs the optimistic auth redirect.
@@ -29,6 +29,13 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims()
   const signedIn = Boolean(data?.claims?.sub)
   const path = request.nextUrl.pathname
+
+  // A sign-in link that landed on the Site URL root (e.g. redirect URL not allow-listed): finish it.
+  if (!path.startsWith('/auth') && (request.nextUrl.searchParams.has('code') || request.nextUrl.searchParams.has('token_hash'))) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/auth/callback'
+    return NextResponse.redirect(url)
+  }
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`))
 
   const redirectTo = (pathname: string, keepNext: boolean) => {
@@ -41,6 +48,6 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (!signedIn && !isPublic) return redirectTo('/sign-in', true)
-  if (signedIn && isPublic) return redirectTo('/', false)
+  if (signedIn && path.startsWith('/sign-in')) return redirectTo('/', false)
   return response
 }
