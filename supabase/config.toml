@@ -243,6 +243,15 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# Hisab signs in with a 6-digit email code (not a link): both templates show {{ .Token }}.
+[auth.email.template.magic_link]
+subject = "Your Hisab code: {{ .Token }}"
+content_path = "./supabase/templates/otp.html"
+
+[auth.email.template.confirmation]
+subject = "Your Hisab code: {{ .Token }}"
+content_path = "./supabase/templates/otp.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"
