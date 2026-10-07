@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import { tokens } from '@hisab/tokens'
 import { ThemeProvider } from '@/components/theme-provider'
 import { ThemeTokens } from '@/components/theme-tokens'
+import { Toaster } from '@/components/ui/toaster'
 import './globals.css'
 
 const inter = Inter({ variable: '--font-inter', subsets: ['latin'] })
@@ -26,7 +27,10 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
         <ThemeTokens />
       </head>
       <body className="min-h-full bg-page font-sans text-text">
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   )

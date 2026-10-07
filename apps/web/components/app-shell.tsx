@@ -1,9 +1,10 @@
 'use client'
 
-import { BarChart3, Home, ListOrdered, LogOut, Settings, Target, Users } from 'lucide-react'
+import { BarChart3, Home, ListOrdered, LogOut, Plus, Settings, Target, Users } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import type { ReactNode } from 'react'
+import { useQuickLog } from '@/components/quick-log/quick-log'
 import { SyncPill } from '@/components/sync-pill'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { getSupabase } from '@/lib/supabase/client'
@@ -28,6 +29,7 @@ function isActive(pathname: string, href: string) {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const quickLog = useQuickLog()
 
   const signOut = async () => {
     await getSupabase().auth.signOut()
@@ -45,6 +47,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           </span>
           <span className="text-[16px] font-semibold tracking-tight">Hisab</span>
         </Link>
+        <button
+          onClick={() => quickLog.open()}
+          className="mb-4 flex h-10 items-center gap-2 rounded-[12px] bg-brand px-3 text-[14px] font-semibold text-brand-fg transition-opacity hover:opacity-90"
+        >
+          <Plus className="size-4" /> Log money
+          <kbd className="ml-auto rounded bg-white/15 px-1.5 text-[11px] font-medium">N</kbd>
+        </button>
         <nav className="flex flex-col gap-0.5" aria-label="Main">
           {NAV.map((item) => (
             <NavLink key={item.href} {...item} active={isActive(pathname, item.href)} />
@@ -79,6 +88,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         </header>
         <main className="flex-1 px-4 pt-6 pb-28 md:px-10 md:pt-10 md:pb-12">{children}</main>
       </div>
+
+      <button
+        onClick={() => quickLog.open()}
+        aria-label="Log money"
+        className="fixed right-4 bottom-[88px] z-30 grid size-14 place-items-center rounded-full bg-brand text-brand-fg shadow-[0_10px_24px_rgba(0,0,0,0.25)] md:hidden"
+      >
+        <Plus className="size-6" />
+      </button>
 
       {/* Bottom tabs (mobile web) */}
       <nav
