@@ -110,7 +110,6 @@ export default function DueScreen() {
 
       <Label>Date</Label>
       <DateStepper value={day} onChange={(d) => setDay(d > today ? today : d)} today={today} />
-
     </FormScreen>
   )
 }

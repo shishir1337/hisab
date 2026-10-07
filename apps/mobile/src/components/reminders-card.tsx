@@ -41,7 +41,7 @@ export function RemindersCard() {
       <View style={{ flex: 1 }}>
         <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>Turn on reminders</Text>
         <Text numberOfLines={1} style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 1 }}>
-          Due dates and money owed to you
+          Due dates and money owed
         </Text>
       </View>
       <Press
