@@ -1,6 +1,7 @@
 'use client'
 
-import { AppSchema, ensureDefaultCategories, SupabaseConnector } from '@hisab/db'
+import { localDate } from '@hisab/core'
+import { AppSchema, ensureDefaultCategories, seedDemoData, SupabaseConnector } from '@hisab/db'
 import type { AbstractPowerSyncDatabase } from '@powersync/web'
 import { PowerSyncContext } from '@powersync/react'
 import { useRouter } from 'next/navigation'
@@ -60,6 +61,10 @@ export function PowerSyncProvider({ children, fallback }: { children: ReactNode;
       } else {
         // Local-only: default categories (same ids as the server seed) so logging works right away.
         await ensureDefaultCategories(instance, userId).catch(() => 0)
+      }
+      // Development only: `?demo=1` fills an empty database with sample data for reviewing screens.
+      if (process.env.NODE_ENV === 'development' && new URLSearchParams(window.location.search).get('demo') === '1') {
+        await seedDemoData(instance, userId, localDate(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone)).catch((e) => console.warn('demo seed failed', e))
       }
       setReady({ db: instance, userId })
     })()
