@@ -4,10 +4,10 @@ import { usePowerSync, useQuery } from '@powersync/react'
 import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
-import { ScrollView, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 import { Button } from '@/components/button'
 import { Chip } from '@/components/chip'
-import { AmountField, DateStepper, ErrorLine, FormScreen, formatDay, Label, NumberStepper, TextField } from '@/components/form'
+import { ChipRow, AmountField, DateStepper, FooterError, FormScreen, Label, monthYear, NumberStepper, TextField } from '@/components/form'
 import { Money } from '@/components/money'
 import { useProfile, useToday } from '@/lib/profile'
 import { useTheme } from '@/lib/theme'
@@ -48,7 +48,7 @@ export default function LoanFormScreen() {
 
   const parsedEmi = parseAmount(emi)
   const preview = parsedEmi.ok
-    ? loanProgress({ emi_amount_minor: parsedEmi.minor, total_installments: months, first_due_date: firstDue, installments_paid_before: Math.min(paidBefore, months) }, 0, 0, today)
+    ? loanProgress({ emi_amount_minor: parsedEmi.minor, total_installments: months, first_due_date: firstDue, installments_paid_before: Math.min(paidBefore, months) }, existing?.paid_count ?? 0, existing?.paid_amount ?? 0, today)
     : null
 
   const save = async () => {
@@ -84,50 +84,59 @@ export default function LoanFormScreen() {
   }
 
   return (
-    <FormScreen title={existing ? 'Edit loan' : 'New loan'}>
-      <Label>Name</Label>
-      <TextField accessibilityLabel="Loan name" value={name} onChangeText={(v) => (setName(v), setError(null))} placeholder="Home loan" maxLength={60} />
+    <FormScreen
+      title={existing ? 'Edit loan' : 'New loan'}
+      footer={
+        <>
+          <FooterError message={error} />
+          <Button onPress={() => void save()} loading={busy}>
+            {existing ? 'Save changes' : 'Add loan'}
+          </Button>
+        </>
+      }
+    >
+      <Label first>Name</Label>
+      <TextField accessibilityLabel="Loan name" value={name} onChangeText={(v) => (setName(v), setError(null))} placeholder="e.g. Home loan, Bike loan" maxLength={60} />
 
       <Label hint="Optional">Lender</Label>
-      <TextField accessibilityLabel="Lender" value={lender} onChangeText={setLender} placeholder="City Bank" maxLength={80} />
+      <TextField accessibilityLabel="Lender" value={lender} onChangeText={setLender} placeholder="e.g. City Bank" maxLength={80} />
 
       <Label>Monthly EMI</Label>
       <AmountField value={emi} onChange={(v) => (setEmi(v), setError(null))} currency={currency} accessibilityLabel="Monthly EMI" />
 
       <Label hint="Total number of EMIs">Tenure</Label>
-      <NumberStepper value={months} onChange={(n) => (setMonths(n), setPaidBefore((p) => Math.min(p, n)))} min={1} max={600} />
+      <NumberStepper value={months} onChange={(n) => (setMonths(n), setPaidBefore((p) => Math.min(p, n)))} min={1} max={600} suffix={months === 1 ? 'month' : 'months'} accessibilityLabel="Tenure in months" />
 
       <Label hint="When EMI #1 was or is due">First EMI date</Label>
       <DateStepper value={firstDue} onChange={setFirstDue} today={today} />
 
       <Label hint="Before you started using Hisab">EMIs already paid</Label>
-      <NumberStepper value={paidBefore} onChange={setPaidBefore} min={0} max={months} />
+      <NumberStepper value={paidBefore} onChange={setPaidBefore} min={0} max={months} suffix={`of ${months}`} accessibilityLabel="EMIs already paid" />
 
       <Label hint="Pre-selected when you mark an EMI paid">Paid from</Label>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+      <ChipRow>
         {accounts.map((a) => (
           <Chip key={a.id} label={a.name} selected={accountId === a.id} onPress={() => setAccountId(accountId === a.id ? null : a.id)} />
         ))}
-      </ScrollView>
+      </ChipRow>
 
       {preview && (
-        <View className="mt-5 rounded-card bg-surface-muted p-4">
-          <Text style={{ color: colors.textMuted, fontSize: 13 }}>
-            {preview.monthsLeft} EMIs left ·{' '}
-            <Money minor={preview.remainingAmount} currency={currency} grouping={grouping} size={13} weight="700" color={colors.text} /> remaining
-          </Text>
-          {preview.debtFreeBy && (
-            <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 2 }}>
-              Debt-free by <Text style={{ color: colors.text, fontWeight: '700' }}>{formatDay(preview.debtFreeBy)}</Text>
-            </Text>
-          )}
+        <View style={{ marginTop: 22, flexDirection: 'row', borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingVertical: 14 }}>
+          <PreviewStat label="EMIs left" value={<Text style={{ color: colors.text, fontSize: 16, fontWeight: '700', fontVariant: ['tabular-nums'] }}>{preview.monthsLeft}</Text>} />
+          <PreviewStat label="Remaining" value={<Money minor={preview.remainingAmount} currency={currency} grouping={grouping} hideCode size={16} weight="700" color={colors.text} />} divider />
+          <PreviewStat label="Debt-free by" value={<Text style={{ color: colors.text, fontSize: 16, fontWeight: '700' }}>{preview.debtFreeBy ? monthYear(preview.debtFreeBy) : '—'}</Text>} divider />
         </View>
       )}
-
-      <ErrorLine message={error} />
-      <Button onPress={() => void save()} loading={busy}>
-        {existing ? 'Save changes' : 'Add loan'}
-      </Button>
     </FormScreen>
+  )
+}
+
+function PreviewStat({ label, value, divider }: { label: string; value: React.ReactNode; divider?: boolean }) {
+  const { colors } = useTheme()
+  return (
+    <View style={[{ flex: 1, paddingHorizontal: 14 }, divider && { borderLeftWidth: 1, borderLeftColor: colors.borderSubtle }]}>
+      <Text style={{ color: colors.textFaint, fontSize: 12 }}>{label}</Text>
+      <View style={{ marginTop: 2 }}>{value}</View>
+    </View>
   )
 }

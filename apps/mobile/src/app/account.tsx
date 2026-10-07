@@ -3,12 +3,11 @@ import { archiveAccount, createAccount, Q, updateAccount, ValidationError, type 
 import { usePowerSync, useQuery } from '@powersync/react'
 import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
-import { X } from 'lucide-react-native'
 import { useEffect, useRef, useState } from 'react'
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { Text, View } from 'react-native'
 import { Button } from '@/components/button'
 import { Chip } from '@/components/chip'
+import { AmountField, FooterError, FormLink, FormScreen, Label, SwitchRow, TextField } from '@/components/form'
 import { ACCOUNT_TYPE_META, ACCOUNT_TYPES, type AccountType } from '@/features/accounts/meta'
 import { Money } from '@/components/money'
 import { useProfile } from '@/lib/profile'
@@ -21,7 +20,6 @@ export default function AccountScreen() {
   const db = usePowerSync()
   const { userId, currency, grouping } = useProfile()
   const { colors } = useTheme()
-  const insets = useSafeAreaInsets()
   const toast = useToast()
   const { data } = useQuery<AccountWithBalance>(Q.accountsWithBalance)
   const existing = id ? data.find((a) => a.id === id) : undefined
@@ -73,97 +71,55 @@ export default function AccountScreen() {
     router.back()
   }
 
+  const typeMeta = ACCOUNT_TYPE_META[type]
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.page }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingHorizontal: 18, paddingBottom: insets.bottom + 24 }} keyboardShouldPersistTaps="handled">
-        <View className="mb-5 flex-row items-center justify-between">
-          <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 22, fontWeight: '700' }}>
-            {existing ? 'Edit account' : 'New account'}
-          </Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()} className="h-10 w-10 items-center justify-center rounded-full bg-surface-muted">
-            <X size={18} color={colors.text} />
-          </Pressable>
-        </View>
+    <FormScreen
+      title={existing ? 'Edit account' : 'New account'}
+      footer={
+        <>
+          <FooterError message={error} />
+          <Button onPress={() => void save()} loading={saving}>
+            {existing ? 'Save changes' : 'Add account'}
+          </Button>
+        </>
+      }
+    >
+      <Label first>Type</Label>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+        {ACCOUNT_TYPES.map((t) => {
+          const M = ACCOUNT_TYPE_META[t]
+          return (
+            <Chip
+              key={t}
+              label={M.label}
+              icon={(c) => <M.icon size={15} color={c} />}
+              selected={type === t}
+              onPress={() => {
+                setType(t)
+                if (t !== 'card') setOwed(false)
+              }}
+            />
+          )
+        })}
+      </View>
 
-        <Label>Type</Label>
-        <View className="flex-row flex-wrap gap-2">
-          {ACCOUNT_TYPES.map((t) => {
-            const M = ACCOUNT_TYPE_META[t]
-            return (
-              <Chip
-                key={t}
-                label={M.label}
-                icon={<M.icon size={14} color={type === t ? colors.brandFg : colors.textMuted} />}
-                selected={type === t}
-                onPress={() => {
-                  setType(t)
-                  if (t !== 'card') setOwed(false)
-                }}
-              />
-            )
-          })}
-        </View>
+      <Label>Name</Label>
+      <TextField accessibilityLabel="Account name" value={name} onChangeText={(v) => (setName(v), setError(null))} placeholder={`e.g. ${typeMeta.example}`} maxLength={60} />
 
-        <Label>Name</Label>
-        <TextInput
-          accessibilityLabel="Account name"
-          value={name}
-          onChangeText={(v) => (setName(v), setError(null))}
-          placeholder={ACCOUNT_TYPE_META[type].example}
-          placeholderTextColor={colors.textFaint}
-          maxLength={60}
-          className="h-[52px] rounded-[14px] border border-border bg-surface px-4"
-          style={{ color: colors.text, fontSize: 16 }}
-        />
-
-        {existing ? (
-          <View className="mt-[18px] mb-2 flex-row items-baseline justify-between">
-            <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '500' }}>Opening balance</Text>
-            <Text style={{ color: colors.textFaint, fontSize: 12 }}>
-              Now: <Money minor={existing.balance_minor} currency={currency} grouping={grouping} size={12} weight="600" color={colors.textMuted} />
-            </Text>
-          </View>
-        ) : (
-          <Label>{type === 'card' && owed ? 'Amount owed on the card' : 'Balance right now'}</Label>
-        )}
-        <View className="h-[52px] flex-row items-center rounded-[14px] border border-border bg-surface px-4">
-          <Text style={{ color: colors.textFaint, fontSize: 13, fontWeight: '500', marginRight: 8 }}>{currency}</Text>
-          <TextInput
-            accessibilityLabel="Balance"
-            value={opening}
-            onChangeText={(v) => (setOpening(v.replace(/[^\d.,]/g, '')), setError(null))}
-            placeholder="0"
-            placeholderTextColor={colors.textFaint}
-            keyboardType="decimal-pad"
-            style={{ flex: 1, color: colors.text, fontSize: 18, fontWeight: '600', fontVariant: ['tabular-nums'] }}
-          />
-        </View>
-        {type === 'card' && (
-          <View className="mt-3 flex-row items-center justify-between">
-            <Text style={{ color: colors.textMuted, fontSize: 13.5 }}>This is money I owe (credit card)</Text>
-            <Switch value={owed} onValueChange={setOwed} trackColor={{ true: colors.brand }} />
-          </View>
-        )}
-
-        <Text accessibilityLiveRegion="polite" style={{ color: colors.danger, fontSize: 13, marginTop: 10, minHeight: 18 }}>
-          {error ?? ''}
+      <Label hint={existing ? undefined : 'What’s in it right now'}>{existing ? 'Opening balance' : type === 'card' && owed ? 'Amount owed on the card' : 'Balance'}</Label>
+      <AmountField value={opening} onChange={(v) => (setOpening(v), setError(null))} currency={currency} accessibilityLabel="Balance" />
+      {existing && (
+        <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 8 }}>
+          Balance now: <Money minor={existing.balance_minor} currency={currency} grouping={grouping} size={13} weight="600" color={colors.text} />
         </Text>
-        <Button onPress={() => void save()} loading={saving}>
-          {existing ? 'Save changes' : 'Add account'}
-        </Button>
-        {existing && (
-          <View className="mt-2">
-            <Button variant="ghost" onPress={() => void toggleArchive()}>
-              {existing.archived ? 'Restore account' : 'Archive account'}
-            </Button>
-          </View>
-        )}
-      </ScrollView>
-    </KeyboardAvoidingView>
-  )
-}
+      )}
+      {type === 'card' && (
+        <View style={{ marginTop: 12, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 14 }}>
+          <SwitchRow label="This is money I owe" description="A credit card balance counts against your total." value={owed} onValueChange={setOwed} />
+        </View>
+      )}
 
-function Label({ children }: { children: string }) {
-  const { colors } = useTheme()
-  return <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '500', marginTop: 18, marginBottom: 8 }}>{children}</Text>
+      {existing && <FormLink label={existing.archived ? 'Restore account' : 'Archive account'} onPress={() => void toggleArchive()} />}
+    </FormScreen>
+  )
 }

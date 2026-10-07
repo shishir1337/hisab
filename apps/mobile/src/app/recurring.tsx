@@ -13,10 +13,10 @@ import { usePowerSync, useQuery } from '@powersync/react'
 import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
-import { ScrollView, Switch, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 import { Button } from '@/components/button'
 import { Chip } from '@/components/chip'
-import { AmountField, DateStepper, ErrorLine, FormScreen, Label, NumberStepper, TextField } from '@/components/form'
+import { ChipRow, AmountField, DateStepper, FooterError, FormLink, FormScreen, Label, NumberStepper, SwitchRow, TextField } from '@/components/form'
 import { Segmented } from '@/components/segmented'
 import { cadence } from '@/features/plan/format'
 import { useProfile, useToday } from '@/lib/profile'
@@ -115,8 +115,18 @@ export default function RecurringScreen() {
   }
 
   return (
-    <FormScreen title={existing ? 'Edit recurring' : 'New recurring'}>
-      <View className="mt-2">
+    <FormScreen
+      title={existing ? 'Edit recurring' : 'New recurring'}
+      footer={
+        <>
+          <FooterError message={error} />
+          <Button onPress={() => void save()} loading={busy}>
+            {existing ? 'Save changes' : 'Add recurring item'}
+          </Button>
+        </>
+      }
+    >
+      <View style={{ marginTop: 8 }}>
         <Segmented<RuleType>
           value={type}
           onChange={(t) => {
@@ -137,7 +147,7 @@ export default function RecurringScreen() {
         accessibilityLabel="Name"
         value={name}
         onChangeText={setName}
-        placeholder={type === 'income' ? 'Salary — Company A' : type === 'transfer' ? 'Monthly savings' : 'House rent'}
+        placeholder={type === 'income' ? 'e.g. Salary — Company A' : type === 'transfer' ? 'e.g. Monthly savings' : 'e.g. House rent'}
         maxLength={80}
       />
 
@@ -147,7 +157,7 @@ export default function RecurringScreen() {
       {type !== 'transfer' && (
         <>
           <Label>Category</Label>
-          <View className="flex-row flex-wrap gap-2">
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
             {categories.map((c) => (
               <Chip key={c.id} label={c.name} icon={<Text style={{ fontSize: 14 }}>{c.icon}</Text>} selected={categoryId === c.id} onPress={() => setCategoryId(c.id)} />
             ))}
@@ -166,15 +176,15 @@ export default function RecurringScreen() {
       {type === 'income' && parties.length > 0 && (
         <>
           <Label hint="Optional">From (company / client)</Label>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+          <ChipRow>
             {parties.map((p) => (
               <Chip key={p.id} label={p.name} selected={partyId === p.id} onPress={() => setPartyId(partyId === p.id ? null : p.id)} />
             ))}
-          </ScrollView>
+          </ChipRow>
         </>
       )}
 
-      <Label hint={cadence({ frequency, interval })}>Repeats</Label>
+      <Label>Repeats</Label>
       <Segmented<Frequency>
         value={frequency}
         onChange={setFrequency}
@@ -184,44 +194,32 @@ export default function RecurringScreen() {
           { value: 'yearly', label: 'Yearly' },
         ]}
       />
-      <View className="mt-2">
-        <NumberStepper value={interval} onChange={setInterval} min={1} max={52} />
+      <View style={{ marginTop: 8 }}>
+        <NumberStepper value={interval} onChange={setInterval} min={1} max={52} format={(n) => cadence({ frequency, interval: n })} accessibilityLabel="Repeat interval" />
       </View>
 
       <Label>{existing ? 'First date' : 'Next date'}</Label>
       <DateStepper value={anchor} onChange={setAnchor} today={today} />
 
-      <View className="mt-5 flex-row items-center justify-between rounded-card border border-border bg-surface px-4 py-3">
-        <View className="flex-1 pr-3">
-          <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>Record automatically</Text>
-          <Text style={{ color: colors.textFaint, fontSize: 12, marginTop: 2 }}>
-            {auto ? 'Logged on its date without asking.' : 'Shows in “Due soon” — confirm with one tap.'}
-          </Text>
-        </View>
-        <Switch value={auto} onValueChange={setAuto} trackColor={{ true: colors.brand }} accessibilityLabel="Record automatically" />
+      <View style={{ marginTop: 22, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 14 }}>
+        <SwitchRow
+          label="Record automatically"
+          description={auto ? 'Logged on its date without asking.' : 'Shows in “Due soon” — confirm with one tap.'}
+          value={auto}
+          onValueChange={setAuto}
+        />
       </View>
-
-      <ErrorLine message={error} />
-      <Button onPress={() => void save()} loading={busy}>
-        {existing ? 'Save changes' : 'Add recurring item'}
-      </Button>
-      {existing && (
-        <View className="mt-2">
-          <Button variant="ghost" onPress={() => void remove()}>
-            Delete recurring item
-          </Button>
-        </View>
-      )}
+      {existing && <FormLink danger label="Delete recurring item" onPress={() => void remove()} />}
     </FormScreen>
   )
 }
 
 function AccountChips({ accounts, value, onChange }: { accounts: { id: string; name: string }[]; value: string | null; onChange: (id: string) => void }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+    <ChipRow>
       {accounts.map((a) => (
         <Chip key={a.id} label={a.name} selected={value === a.id} onPress={() => onChange(a.id)} />
       ))}
-    </ScrollView>
+    </ChipRow>
   )
 }

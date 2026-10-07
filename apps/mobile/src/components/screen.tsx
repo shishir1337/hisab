@@ -199,7 +199,7 @@ export function FormScreen({ title, children, footer }: { title: string; childre
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: colors.page }}>
       <View style={{ paddingTop: insets.top, backgroundColor: colors.page, zIndex: 1 }}>
-        <View style={{ height: BAR_HEIGHT + 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: GUTTER, paddingRight: 10 }}>
+        <View style={{ height: BAR_HEIGHT + 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: GUTTER, paddingRight: GUTTER - 4 }}>
           <Text accessibilityRole="header" numberOfLines={1} style={{ flex: 1, color: colors.text, fontSize: 20, fontWeight: '700', letterSpacing: -0.4 }}>
             {title}
           </Text>

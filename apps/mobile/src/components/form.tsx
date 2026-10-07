@@ -1,9 +1,11 @@
 import { addDays, addMonths, dayLabel } from '@hisab/core'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Minus, Plus } from 'lucide-react-native'
 import { useState, type ReactNode } from 'react'
-import { Switch, Text, TextInput, View, type TextInputProps } from 'react-native'
+import { ScrollView, Switch, Text, TextInput, View, type TextInputProps } from 'react-native'
 import { useTheme } from '@/lib/theme'
 import { Press } from './press'
+
+import { GUTTER } from './screen'
 
 export { FormScreen } from './screen'
 
@@ -206,11 +208,52 @@ export function SwitchRow({ label, description, value, onValueChange }: { label:
   )
 }
 
+/** A horizontally scrolling row of chips that runs to the screen edges instead of being cut at the gutter. */
+export function ChipRow({ children }: { children: ReactNode }) {
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled"
+      style={{ marginHorizontal: -GUTTER }}
+      contentContainerStyle={{ gap: 8, paddingHorizontal: GUTTER, paddingVertical: 2 }}
+    >
+      {children}
+    </ScrollView>
+  )
+}
+
 export function ErrorLine({ message }: { message: string | null }) {
   const { colors } = useTheme()
   return (
     <Text accessibilityLiveRegion="polite" style={{ color: colors.danger, fontSize: 13, marginTop: 14, marginBottom: 6, minHeight: 18 }}>
       {message ?? ''}
+    </Text>
+  )
+}
+
+/** Quiet secondary/destructive action at the end of a form body (kept out of the pinned footer on purpose). */
+export function FormLink({ label, onPress, danger, disabled }: { label: string; onPress: () => void; danger?: boolean; disabled?: boolean }) {
+  const { colors } = useTheme()
+  return (
+    <Press
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={{ marginTop: 28, height: 48, alignSelf: 'center', justifyContent: 'center', paddingHorizontal: 16, opacity: disabled ? 0.4 : 1 }}
+    >
+      <Text style={{ color: danger ? colors.danger : colors.textMuted, fontSize: 14.5, fontWeight: '600' }}>{label}</Text>
+    </Press>
+  )
+}
+
+/** Error shown just above a pinned form footer's button; takes no space when there's nothing to say. */
+export function FooterError({ message }: { message: string | null }) {
+  const { colors } = useTheme()
+  if (!message) return null
+  return (
+    <Text accessibilityLiveRegion="polite" style={{ color: colors.danger, fontSize: 13, marginBottom: 10, textAlign: 'center' }}>
+      {message}
     </Text>
   )
 }

@@ -4,10 +4,10 @@ import { usePowerSync, useQuery } from '@powersync/react'
 import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
-import { ScrollView, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 import { Button } from '@/components/button'
 import { Chip } from '@/components/chip'
-import { AmountField, DateStepper, ErrorLine, FormScreen, formatDay, Label } from '@/components/form'
+import { ChipRow, AmountField, DateStepper, FooterError, FormScreen, formatDay, Label } from '@/components/form'
 import { IconTile } from '@/components/icon-tile'
 import { useProfile, useToday } from '@/lib/profile'
 import { useTheme } from '@/lib/theme'
@@ -66,13 +66,33 @@ export default function DueScreen() {
   }
 
   return (
-    <FormScreen title={rule.type === 'income' ? 'Record income' : rule.type === 'transfer' ? 'Record transfer' : 'Record payment'}>
-      <View className="mt-2 flex-row items-center gap-3 rounded-card border border-border bg-surface p-3.5">
-        <IconTile icon={rule.category_icon ?? '🔁'} tint={rule.category_color} />
-        <View className="flex-1">
-          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>{rule.note || rule.category_name || 'Transfer'}</Text>
-          <Text style={{ color: colors.textFaint, fontSize: 12 }}>
-            Due {formatDay(date)}
+    <FormScreen
+      title={rule.type === 'income' ? 'Record income' : rule.type === 'transfer' ? 'Record transfer' : 'Record payment'}
+      footer={
+        <>
+          <FooterError message={error} />
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <View style={{ flex: 1 }}>
+              <Button variant="secondary" disabled={busy} onPress={() => void skip()} accessibilityLabel="Skip this one — it won’t be recorded">
+                Skip
+              </Button>
+            </View>
+            <View style={{ flex: 2 }}>
+              <Button onPress={() => void record()} loading={busy}>
+                Record
+              </Button>
+            </View>
+          </View>
+        </>
+      }
+    >
+      <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 14 }}>
+        <IconTile icon={rule.category_icon ?? '🔁'} tint={rule.category_color} size={40} />
+        <View style={{ flex: 1 }}>
+          <Text numberOfLines={1} style={{ color: colors.text, fontSize: 16, fontWeight: '600' }}>{rule.note || rule.category_name || 'Transfer'}</Text>
+          <Text style={{ color: date < today ? colors.danger : colors.textMuted, fontSize: 13, marginTop: 2, fontWeight: date < today ? '600' : '400' }}>
+            {date < today ? 'Overdue · was due ' : 'Due '}
+            {formatDay(date)}
             {rule.party_name ? ` · ${rule.party_name}` : ''}
           </Text>
         </View>
@@ -82,24 +102,15 @@ export default function DueScreen() {
       <AmountField value={amount} onChange={(v) => (setAmount(v), setError(null))} currency={currency} accessibilityLabel="Amount" />
 
       <Label>{rule.type === 'income' ? 'Received in' : 'Paid from'}</Label>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+      <ChipRow>
         {accounts.map((a) => (
           <Chip key={a.id} label={a.name} selected={(accountId ?? rule.account_id) === a.id} onPress={() => setAccountId(a.id)} />
         ))}
-      </ScrollView>
+      </ChipRow>
 
       <Label>Date</Label>
       <DateStepper value={day} onChange={(d) => setDay(d > today ? today : d)} today={today} />
 
-      <ErrorLine message={error} />
-      <Button onPress={() => void record()} loading={busy}>
-        Record
-      </Button>
-      <View className="mt-2">
-        <Button variant="ghost" disabled={busy} onPress={() => void skip()}>
-          Skip this one
-        </Button>
-      </View>
     </FormScreen>
   )
 }
