@@ -1,7 +1,7 @@
 import { router } from 'expo-router'
 import { ArrowLeft, X } from 'lucide-react-native'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Animated, KeyboardAvoidingView, Platform, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
+import { Animated, Keyboard, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '@/lib/theme'
 import { Press } from './press'
@@ -196,6 +196,20 @@ export function FormScreen({ title, children, footer }: { title: string; childre
   const insets = useSafeAreaInsets()
   const scrollY = useRef(new Animated.Value(0)).current
   const hairline = scrollY.interpolate({ inputRange: [0, 8], outputRange: [0, 1], extrapolate: 'clamp' })
+  // When the keyboard opens, bring the focused field into view: otherwise a field near the end of a long
+  // form stays half-hidden behind the pinned footer above the keyboard.
+  const scrollRef = useRef<ScrollView>(null)
+  const contentRef = useRef<View>(null)
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', () => {
+      const input = TextInput.State.currentlyFocusedInput()
+      const scroll = scrollRef.current
+      const inner = contentRef.current
+      if (!input || !scroll || !inner) return
+      input.measureLayout(inner, (_x, y) => scroll.scrollTo({ y: Math.max(0, y - 140), animated: true }), () => {})
+    })
+    return () => sub.remove()
+  }, [])
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: colors.page }}>
       <View style={{ paddingTop: insets.top, backgroundColor: colors.page, zIndex: 1 }}>
@@ -217,13 +231,14 @@ export function FormScreen({ title, children, footer }: { title: string; childre
         <Animated.View style={{ height: 1, backgroundColor: colors.border, opacity: hairline }} />
       </View>
       <Animated.ScrollView
+        ref={scrollRef}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: GUTTER, paddingTop: 4, paddingBottom: footer ? 24 : insets.bottom + 28 }}
         keyboardShouldPersistTaps="handled"
       >
-        {children}
+        <View ref={contentRef}>{children}</View>
       </Animated.ScrollView>
       {footer ? (
         <View style={{ paddingHorizontal: GUTTER, paddingTop: 12, paddingBottom: insets.bottom + 12, borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.page }}>
