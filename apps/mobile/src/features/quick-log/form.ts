@@ -16,6 +16,8 @@ export interface FormState {
   note: string
   fx: { currency: string; rate: string } | null
   editingId: string | null
+  /** Local today; the day can't move past it (no accidental future entries). */
+  today: string
   /** Original timestamp when editing, kept if the day is unchanged. */
   originalAt: string | null
   originalDay: string | null
@@ -50,7 +52,15 @@ export function initialForm({ today, accountId }: { today: string; accountId: st
     editingId: null,
     originalAt: null,
     originalDay: null,
+    today,
   }
+}
+
+/** Accepts "121,40" (locale comma) as 121.40; keeps only the first decimal separator. */
+function cleanRate(v: string): string {
+  const s = v.replace(/,/g, '.').replace(/[^\d.]/g, '')
+  const dot = s.indexOf('.')
+  return dot === -1 ? s : s.slice(0, dot + 1) + s.slice(dot + 1).replace(/\./g, '')
 }
 
 export function formReducer(s: FormState, a: FormAction): FormState {
@@ -76,7 +86,7 @@ export function formReducer(s: FormState, a: FormAction): FormState {
     case 'setParty':
       return { ...s, partyId: a.id }
     case 'setDay':
-      return { ...s, day: a.day }
+      return { ...s, day: a.day > s.today ? s.today : a.day }
     case 'setNote':
       return { ...s, note: a.value }
     case 'toggleFx':
@@ -85,12 +95,14 @@ export function formReducer(s: FormState, a: FormAction): FormState {
     case 'setFxCurrency':
       return s.fx ? { ...s, fx: { ...s.fx, currency: a.value.toUpperCase().slice(0, 3) } } : s
     case 'setFxRate':
-      return s.fx ? { ...s, fx: { ...s.fx, rate: a.value.replace(/[^\d.]/g, '') } } : s
+      return s.fx ? { ...s, fx: { ...s.fx, rate: cleanRate(a.value) } } : s
     case 'load': {
       const t = a.tx
+      // EMI and lending movements are edited from their loan / person screens, not here.
+      if (t.type !== 'expense' && t.type !== 'income' && t.type !== 'transfer') return s
       const fx = t.original_currency && t.fx_rate ? { currency: t.original_currency, rate: t.fx_rate } : null
       return {
-        type: t.type === 'income' || t.type === 'transfer' ? t.type : 'expense',
+        type: t.type,
         keypad: keypadFromMinor(fx && t.original_amount_minor ? t.original_amount_minor : t.amount_minor),
         categoryId: t.category_id,
         accountId: t.account_id,
@@ -102,6 +114,7 @@ export function formReducer(s: FormState, a: FormAction): FormState {
         editingId: t.id,
         originalAt: t.occurred_at,
         originalDay: t.occurred_on,
+        today: s.today,
       }
     }
     case 'reset':

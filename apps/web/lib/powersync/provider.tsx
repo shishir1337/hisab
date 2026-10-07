@@ -52,9 +52,15 @@ export function PowerSyncProvider({ children, fallback }: { children: ReactNode;
       })
       await instance.init()
       if (disposed) return void instance.close()
-      // Default categories exist even before (or without) the first sync — same ids as the server seed.
-      await ensureDefaultCategories(instance, userId)
-      if (connector.syncEnabled) void instance.connect(connector)
+      if (connector.syncEnabled) {
+        void instance.connect(connector)
+        // With sync, the server already has this user's categories: seed only if still empty after the first sync.
+        const db = instance
+        void db.waitForFirstSync().then(() => ensureDefaultCategories(db, userId)).catch(() => {})
+      } else {
+        // Local-only: default categories (same ids as the server seed) so logging works right away.
+        await ensureDefaultCategories(instance, userId).catch(() => 0)
+      }
       setReady({ db: instance, userId })
     })()
 

@@ -20,7 +20,7 @@ export function Money({ minor, currency, size, weight = '600', color, hideCode, 
   const [whole, decimals] = f.number.split('.')
   return (
     <Text
-      accessibilityLabel={f.text}
+      accessibilityLabel={`${f.number.replace('−', 'minus ').replace('+', 'plus ')} ${f.code}`}
       className={className}
       style={{
         fontSize: size,

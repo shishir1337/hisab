@@ -13,8 +13,8 @@ import {
 } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
 import * as Haptics from 'expo-haptics'
-import { Calendar, ChevronLeft, ChevronRight, Globe, Plus, StickyNote, Trash2, User, Wallet } from 'lucide-react-native'
-import { useEffect, useMemo, useReducer, useState } from 'react'
+import { Calendar, ChevronLeft, ChevronRight, Globe, Plus, StickyNote, Trash2, User, Wallet, X } from 'lucide-react-native'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import { Button } from '@/components/button'
 import { Chip } from '@/components/chip'
@@ -57,7 +57,9 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
   const [panel, setPanel] = useState<Panel>('none')
   const [hint, setHint] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  const [accountTouched, setAccountTouched] = useState(false)
+  // A ref (not state) so in-flight async lookups see the user's latest explicit choice.
+  const accountTouched = useRef(false)
+  const busy = useRef(false)
   const [newParty, setNewParty] = useState('')
   const editing = Boolean(form.editingId)
 
@@ -67,8 +69,8 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
     else if (options.type) dispatch({ type: 'setType', value: options.type })
   }, [options])
   useEffect(() => {
-    if (!form.accountId && accounts[0]) dispatch({ type: 'setAccount', id: accounts[0].id })
-  }, [accounts, form.accountId])
+    if (!options.edit && !form.accountId && accounts[0]) dispatch({ type: 'setAccount', id: accounts[0].id })
+  }, [accounts, form.accountId, options.edit])
 
   const now = new Date()
   const suggestions = useMemo(
@@ -87,19 +89,21 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
   const party = parties.find((p) => p.id === form.partyId)
 
   const typed = keypadToMinor(form.keypad)
-  const fxAmount = form.fx && typed !== null && /^\d+(\.\d+)?$/.test(form.fx.rate) ? safeFx(typed, form.fx.rate) : null
+  const fxAmount = form.fx && typed !== null && /^\d{1,12}(\.\d{1,8})?$/.test(form.fx.rate) ? safeFx(typed, form.fx.rate) : null
 
   const selectCategory = async (id: string) => {
     dispatch({ type: 'setCategory', id })
     setPanel('none')
     setHint(null)
-    if (!accountTouched && !editing) {
+    if (!accountTouched.current && !editing) {
       const last = await db.getOptional<{ account_id: string }>(Q.lastAccountForCategory, [id])
-      if (last && accounts.some((a) => a.id === last.account_id)) dispatch({ type: 'setAccount', id: last.account_id })
+      if (!accountTouched.current && last && accounts.some((a) => a.id === last.account_id)) dispatch({ type: 'setAccount', id: last.account_id })
     }
   }
 
   const commit = async (draft: TransactionDraft, label: string) => {
+    if (busy.current) return
+    busy.current = true
     setSaving(true)
     try {
       if (editing && options.edit) {
@@ -133,6 +137,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
       setHint(e instanceof ValidationError ? (e.issues[0]?.message ?? 'Check the details') : 'Couldn’t save. Please try again.')
     } finally {
+      busy.current = false
       setSaving(false)
     }
   }
@@ -152,21 +157,27 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
   }
 
   const logSuggestion = (s: (typeof suggestions)[number]) => {
-    const accountId =
-      accounts.find((a) => a.id === form.accountId)?.id ?? accounts[0]?.id
-    if (!accountId) return setHint(MISSING_HINT.account)
+    if (busy.current) return
+    const fallback = accounts.find((a) => a.id === form.accountId)?.id ?? accounts[0]?.id
+    if (!fallback) return setHint(MISSING_HINT.account)
     const cat = byId.get(s.category_id)
     void (async () => {
-      const last = await db.getOptional<{ account_id: string }>(Q.lastAccountForCategory, [s.category_id])
-      const useAccount = last && accounts.some((a) => a.id === last.account_id) ? last.account_id : accountId
+      let accountId = fallback
+      if (!accountTouched.current) {
+        const last = await db.getOptional<{ account_id: string }>(Q.lastAccountForCategory, [s.category_id])
+        if (last && accounts.some((a) => a.id === last.account_id)) accountId = last.account_id
+      }
+      // Same day/time rules as a normal save (respects a day picked in the day panel).
+      const r = toDraft({ ...form, type: 'expense', keypad: '', categoryId: s.category_id, accountId, note: s.note ?? '', fx: null }, new Date(), profile.timeZone)
+      const base = r.ok ? r.draft : null
       const draft: TransactionDraft = {
         type: 'expense',
         amount_minor: s.amount_minor,
-        account_id: useAccount,
+        account_id: accountId,
         category_id: s.category_id,
         note: s.note,
-        occurred_on: today,
-        occurred_at: new Date().toISOString(),
+        occurred_on: form.day,
+        occurred_at: base?.occurred_at ?? new Date().toISOString(),
       }
       await commit(draft, `${s.note || cat?.name || ''} ${formatMoney(s.amount_minor, profile.currency, { grouping: profile.grouping }).text}`)
     })()
@@ -299,7 +310,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
                 onPress={() => {
                   if (panel === 'account') {
                     dispatch({ type: 'setAccount', id: a.id })
-                    setAccountTouched(true)
+                    accountTouched.current = true
                   } else dispatch({ type: 'setToAccount', id: a.id })
                   setPanel('none')
                   setHint(null)
@@ -317,8 +328,8 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
               <ChevronLeft size={18} color={colors.text} />
             </IconButton>
             <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600', minWidth: 78, textAlign: 'center' }}>{dayLabel(form.day, today)}</Text>
-            <IconButton label="Next day" onPress={() => dispatch({ type: 'setDay', day: addDays(form.day, 1) })}>
-              <ChevronRight size={18} color={colors.text} />
+            <IconButton label="Next day" disabled={form.day >= today} onPress={() => dispatch({ type: 'setDay', day: addDays(form.day, 1) })}>
+              <ChevronRight size={18} color={form.day >= today ? colors.textFaint : colors.text} />
             </IconButton>
           </View>
         </View>
@@ -371,6 +382,18 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
       )}
       {panel === 'fx' && form.fx && (
         <View className="gap-2">
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              dispatch({ type: 'toggleFx' })
+              setPanel('none')
+            }}
+            className="flex-row items-center gap-1.5 self-start py-1"
+            hitSlop={8}
+          >
+            <X size={14} color={colors.textMuted} />
+            <Text style={{ color: colors.textMuted, fontSize: 12.5 }}>Received in {profile.currency} instead</Text>
+          </Pressable>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
             {FX_CURRENCIES.map((c) => (
               <Chip key={c} size="sm" label={c} selected={form.fx?.currency === c} onPress={() => dispatch({ type: 'setFxCurrency', value: c })} />
@@ -413,10 +436,6 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
                 if (!form.fx) dispatch({ type: 'toggleFx' })
                 togglePanel('fx')
               }}
-              onLongPress={() => {
-                if (form.fx) dispatch({ type: 'toggleFx' })
-                setPanel('none')
-              }}
             />
           </>
         )}
@@ -449,9 +468,9 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
   )
 }
 
-function IconButton({ label, onPress, children }: { label: string; onPress: () => void; children: React.ReactNode }) {
+function IconButton({ label, onPress, disabled, children }: { label: string; onPress: () => void; disabled?: boolean; children: React.ReactNode }) {
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} hitSlop={6} onPress={onPress} className="h-10 w-10 items-center justify-center rounded-[11px] bg-surface-muted">
+    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} hitSlop={6} onPress={onPress} className="h-11 w-11 items-center justify-center rounded-[11px] bg-surface-muted">
       {children}
     </Pressable>
   )

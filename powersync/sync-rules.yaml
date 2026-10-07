@@ -1,5 +1,9 @@
 # PowerSync sync rules — every user gets exactly one bucket containing only their own rows.
 # Spec §4.2. Deploy via the PowerSync dashboard (Sync Rules tab) or `powersync deploy`.
+# Edition 2: timestamps sync as ISO-8601 ("2026-10-07T10:00:00.000000Z", not "2026-10-07 10:00:00").
+config:
+  edition: 2
+
 bucket_definitions:
   user_data:
     parameters: SELECT request.user_id() AS user_id

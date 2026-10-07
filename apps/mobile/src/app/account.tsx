@@ -4,12 +4,13 @@ import { usePowerSync, useQuery } from '@powersync/react'
 import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import { X } from 'lucide-react-native'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '@/components/button'
 import { Chip } from '@/components/chip'
 import { ACCOUNT_TYPE_META, ACCOUNT_TYPES, type AccountType } from '@/features/accounts/meta'
+import { Money } from '@/components/money'
 import { useProfile } from '@/lib/profile'
 import { useTheme } from '@/lib/theme'
 import { useToast } from '@/lib/undo'
@@ -18,7 +19,7 @@ import { useToast } from '@/lib/undo'
 export default function AccountScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>()
   const db = usePowerSync()
-  const { userId, currency } = useProfile()
+  const { userId, currency, grouping } = useProfile()
   const { colors } = useTheme()
   const insets = useSafeAreaInsets()
   const toast = useToast()
@@ -32,8 +33,11 @@ export default function AccountScreen() {
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
+  // Initialise once per account: live query re-emits (any write) must not wipe what the user typed.
+  const loadedFor = useRef<string | null>(null)
   useEffect(() => {
-    if (!existing) return
+    if (!existing || loadedFor.current === existing.id) return
+    loadedFor.current = existing.id
     setName(existing.name)
     setType(existing.type)
     setOpening(existing.opening_balance_minor === 0 ? '' : String(Math.abs(existing.opening_balance_minor) / 100))
@@ -91,7 +95,10 @@ export default function AccountScreen() {
                 label={M.label}
                 icon={<M.icon size={14} color={type === t ? colors.brandFg : colors.textMuted} />}
                 selected={type === t}
-                onPress={() => setType(t)}
+                onPress={() => {
+                  setType(t)
+                  if (t !== 'card') setOwed(false)
+                }}
               />
             )
           })}
@@ -109,7 +116,16 @@ export default function AccountScreen() {
           style={{ color: colors.text, fontSize: 16 }}
         />
 
-        <Label>{type === 'card' && owed ? 'Amount owed on the card' : 'Balance right now'}</Label>
+        {existing ? (
+          <View className="mt-[18px] mb-2 flex-row items-baseline justify-between">
+            <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '500' }}>Opening balance</Text>
+            <Text style={{ color: colors.textFaint, fontSize: 12 }}>
+              Now: <Money minor={existing.balance_minor} currency={currency} grouping={grouping} size={12} weight="600" color={colors.textMuted} />
+            </Text>
+          </View>
+        ) : (
+          <Label>{type === 'card' && owed ? 'Amount owed on the card' : 'Balance right now'}</Label>
+        )}
         <View className="h-[52px] flex-row items-center rounded-[14px] border border-border bg-surface px-4">
           <Text style={{ color: colors.textFaint, fontSize: 13, fontWeight: '500', marginRight: 8 }}>{currency}</Text>
           <TextInput

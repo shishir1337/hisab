@@ -94,3 +94,12 @@ describe('review fixes', () => {
     expect(paths(tx({ type: 'expense', category_id: C, occurred_on: d }))).toContain('occurred_on'))
   it('accepts a leap day', () => expect(tx({ type: 'expense', category_id: C, occurred_on: '2028-02-29' }).success).toBe(true))
 })
+
+describe('synced timestamps', () => {
+  it('accepts and normalizes a PowerSync legacy (space) timestamp', () => {
+    const r = tx({ type: 'expense', category_id: C, occurred_at: '2026-10-07 10:00:00.000Z' })
+    expect(r.success).toBe(true)
+    expect(r.success && r.data.occurred_at).toBe('2026-10-07T10:00:00.000Z')
+  })
+  it('accepts microsecond precision', () => expect(tx({ type: 'expense', category_id: C, occurred_at: '2026-10-07T10:00:00.123456Z' }).success).toBe(true))
+})

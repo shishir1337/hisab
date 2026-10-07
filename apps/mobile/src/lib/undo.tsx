@@ -65,7 +65,11 @@ export function UndoProvider({ children }: { children: ReactNode }) {
                 onPress={async () => {
                   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
                   setToast(null)
-                  await toast.onUndo?.()
+                  try {
+                    await toast.onUndo?.()
+                  } catch {
+                    show({ message: 'Couldn’t undo. Please fix it manually.' })
+                  }
                 }}
               >
                 <Text style={{ color: colors.page, fontSize: 13.5, fontWeight: '700' }}>Undo</Text>

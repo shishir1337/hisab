@@ -119,3 +119,26 @@ describe('transactions', () => {
     ])
   })
 })
+
+describe('review fixes', () => {
+  it('trend counts transfers between archived and active accounts', async () => {
+    await createTransaction(db, USER, { ...base, type: 'transfer', amount_minor: 5000, account_id: bank, to_account_id: cash })
+    await archiveAccount(db, bank, true)
+    // Active total rose by 5,000 today (cash gained it, bank is archived).
+    expect(await db.getAll(Q.dailyNet, ['2026-10-01'])).toEqual([{ day: '2026-10-07', net: 5000 }])
+  })
+
+  it('orders mixed timestamp formats by real time', async () => {
+    const a = await createTransaction(db, USER, { ...base, occurred_at: '2026-10-07T09:00:00.000Z', type: 'expense', amount_minor: 1, account_id: cash, category_id: CAT_FOOD })
+    await db.execute("update transactions set occurred_at = '2026-10-07 11:00:00.000Z' where id = ?", [a])
+    await createTransaction(db, USER, { ...base, occurred_at: '2026-10-07T10:00:00.000Z', type: 'expense', amount_minor: 2, account_id: cash, category_id: CAT_FOOD })
+    const rows = await db.getAll<TransactionView>(Q.transactionsBetween, ['2026-10-07', '2026-10-07'])
+    expect(rows.map((r) => r.amount_minor)).toEqual([1, 2])
+    expect(rows[0]!.occurred_at).toBe('2026-10-07T11:00:00.000Z')
+  })
+
+  it('account opening date can be given (local day)', async () => {
+    const id = await createAccount(db, USER, { name: 'Wallet', type: 'cash', opening_date: '2026-10-07' })
+    expect(await db.getOptional('select opening_date from accounts where id = ?', [id])).toEqual({ opening_date: '2026-10-07' })
+  })
+})

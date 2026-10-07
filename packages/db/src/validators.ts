@@ -1,3 +1,4 @@
+import { isoInstant } from '@hisab/core'
 import { z } from 'zod'
 
 // Mirrors the Postgres CHECK constraints (supabase/migrations/*_schema.sql) so bad input is caught
@@ -28,7 +29,7 @@ export const transactionInput = z
     category_id: id.nullish(),
     party_id: id.nullish(),
     occurred_on: isoDate,
-    occurred_at: z.iso.datetime(),
+    occurred_at: z.string().transform(isoInstant).pipe(z.iso.datetime({ offset: true })),
     note: z.string().max(500).nullish(),
     original_amount_minor: amount.nullish(),
     original_currency: currencyCode.nullish(),

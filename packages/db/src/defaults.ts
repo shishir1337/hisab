@@ -31,12 +31,23 @@ export function defaultCategoryId(userId: string, kind: 'income' | 'expense', na
   return md5Uuid(`${userId}:${kind}:${name}`)
 }
 
+const inFlight = new WeakMap<Executor, Promise<number>>()
+
 /**
  * Seeds the default categories locally when none exist yet (first launch offline, or sync not set up).
  * Because ids match the server seed, uploading them later is a no-op upsert, never a duplicate.
  * Returns how many rows were inserted.
  */
-export async function ensureDefaultCategories(ex: Executor, userId: string): Promise<number> {
+export function ensureDefaultCategories(ex: Executor, userId: string): Promise<number> {
+  // Concurrent callers (e.g. a remount) share one run instead of racing on the same ids.
+  const running = inFlight.get(ex)
+  if (running) return running.then(() => 0)
+  const run = seed(ex, userId).finally(() => inFlight.delete(ex))
+  inFlight.set(ex, run)
+  return run
+}
+
+async function seed(ex: Executor, userId: string): Promise<number> {
   const existing = await ex.getOptional<{ n: number }>('select count(*) as n from categories')
   if ((existing?.n ?? 0) > 0) return 0
   const ts = new Date().toISOString()

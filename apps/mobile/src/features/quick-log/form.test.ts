@@ -114,3 +114,22 @@ describe('load (edit an existing transaction)', () => {
     expect(r.ok && r.draft.occurred_at).toBe('2026-10-06T03:15:00.000Z')
   })
 })
+
+describe('review fixes', () => {
+  it('a comma decimal separator in the fx rate is a decimal point', () => {
+    const s = run({ type: 'setType', value: 'income' }, { type: 'toggleFx' }, { type: 'setFxRate', value: '121,40' })
+    expect(s.fx?.rate).toBe('121.40')
+  })
+  it('a second separator is ignored', () => {
+    const s = run({ type: 'setType', value: 'income' }, { type: 'toggleFx' }, { type: 'setFxRate', value: '1.2.3' })
+    expect(s.fx?.rate).toBe('1.23')
+  })
+  it('cannot move the day into the future', () => expect(run({ type: 'setDay', day: '2026-10-09' }).day).toBe(TODAY))
+  it('refuses to load types the sheet cannot edit (emi/lending)', () =>
+    expect(
+      run({
+        type: 'load',
+        tx: { id: 'e', type: 'emi', amount_minor: 1, account_id: CASH, to_account_id: null, category_id: null, party_id: null, occurred_on: TODAY, occurred_at: NOW.toISOString(), note: null, original_amount_minor: null, original_currency: null, fx_rate: null },
+      }).editingId,
+    ).toBeNull())
+})

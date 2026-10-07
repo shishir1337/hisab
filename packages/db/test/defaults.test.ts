@@ -44,3 +44,11 @@ describe('default categories', () => {
     ).resolves.toBeTruthy()
   })
 })
+
+describe('review fixes', () => {
+  it('concurrent seeding does not throw or duplicate', async () => {
+    const db = createTestDb()
+    await Promise.all([ensureDefaultCategories(db, USER), ensureDefaultCategories(db, USER)])
+    expect(await db.getAll('select id from categories')).toHaveLength(18)
+  })
+})

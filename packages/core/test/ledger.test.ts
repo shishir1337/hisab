@@ -77,3 +77,13 @@ describe('balanceSeries', () => {
     expect(balanceSeries(1000, [{ day: '2026-10-09', net: 50 }], '2026-10-07', 1)).toEqual([{ day: '2026-10-07', balance: 950 }])
   })
 })
+
+import { isoInstant } from '../src/dates'
+
+describe('isoInstant (PowerSync legacy timestamps)', () => {
+  it('converts a space-separated timestamp to ISO', () => expect(isoInstant('2026-10-07 10:00:00.000Z')).toBe('2026-10-07T10:00:00.000Z'))
+  it('keeps ISO untouched', () => expect(isoInstant('2026-10-07T10:00:00.000Z')).toBe('2026-10-07T10:00:00.000Z'))
+  it('assumes UTC when there is no zone', () => expect(isoInstant('2026-10-07 10:00:00')).toBe('2026-10-07T10:00:00Z'))
+  it('keeps explicit offsets', () => expect(isoInstant('2026-10-07 10:00:00+06')).toBe('2026-10-07T10:00:00+06'))
+  it('parses everywhere', () => expect(new Date(isoInstant('2026-10-07 10:00:00.123456Z')).toISOString()).toBe('2026-10-07T10:00:00.123Z'))
+})

@@ -25,6 +25,8 @@ export function Chip({ label, icon, selected, onPress, onLongPress, accessibilit
         onPress()
       }}
       onLongPress={onLongPress}
+      // Visual 32–38dp, touch target ≥ 44dp (spec §7.5).
+      hitSlop={size === 'sm' ? 6 : 3}
       className="flex-row items-center gap-1.5 rounded-full border"
       style={({ pressed }) => ({
         paddingHorizontal: size === 'sm' ? 10 : 12,

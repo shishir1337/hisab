@@ -161,3 +161,18 @@ describe('review fixes', () => {
     },
   )
 })
+
+describe('categories never overwrite the server copy', () => {
+  it('category PUT is an insert-if-missing upsert', async () => {
+    const calls: unknown[] = []
+    const client = {
+      from: (table: string) => ({
+        upsert: async (payload: unknown, opts?: unknown) => (calls.push({ table, payload, opts }), { error: null }),
+      }),
+      auth: { getSession: async () => ({ data: { session: { access_token: 't' } } }) },
+    } as never
+    const { db } = fakeDb([{ op: UpdateType.PUT, table: 'categories', id: 'c1', opData: { name: 'Food' } }])
+    await new SupabaseConnector(client, {}).uploadData(db)
+    expect(calls).toEqual([{ table: 'categories', payload: { name: 'Food', id: 'c1' }, opts: { onConflict: 'id', ignoreDuplicates: true } }])
+  })
+})

@@ -137,6 +137,7 @@ const transactions = new Table(
     indexes: {
       day: ['occurred_on'],
       account: ['account_id'],
+      to_account: ['to_account_id'],
       category: ['category_id'],
       party: ['party_id'],
       loan: ['loan_id'],

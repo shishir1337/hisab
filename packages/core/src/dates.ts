@@ -76,3 +76,12 @@ export function groupByDay<T extends { occurred_on: string }>(rows: T[]): { day:
   }
   return [...map.entries()].sort(([a], [b]) => (a < b ? 1 : a > b ? -1 : 0)).map(([day, rows]) => ({ day, rows }))
 }
+
+/**
+ * Normalizes a timestamp to ISO-8601. PowerSync's legacy encoding sends Postgres timestamptz as
+ * `2026-10-07 10:00:00.000Z` (space separator), which some JS engines (Hermes) can't parse.
+ */
+export function isoInstant(ts: string): string {
+  const s = ts.trim().replace(' ', 'T')
+  return /([zZ]|[+-]\d{2}(:?\d{2})?)$/.test(s) ? s : `${s}Z`
+}

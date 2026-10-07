@@ -80,7 +80,12 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
       let result: { error: { code?: string; message: string } | null }
       switch (op.op) {
         case UpdateType.PUT:
-          result = await table.upsert({ ...data, id: op.id })
+          // Default categories are seeded on every device with the same ids: never let a fresh
+          // device's defaults overwrite the server copy (the user's renames/order win).
+          result =
+            op.table === 'categories'
+              ? await table.upsert({ ...data, id: op.id }, { onConflict: 'id', ignoreDuplicates: true })
+              : await table.upsert({ ...data, id: op.id })
           break
         case UpdateType.PATCH:
           result = await table.update(data).eq('id', op.id)

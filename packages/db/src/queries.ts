@@ -3,26 +3,18 @@
  * `signedEffect` in @hisab/core and spec §5.2. Every query ignores soft-deleted rows.
  */
 
-/** Signed effect of transaction `t` on account `a` (SQL twin of core `signedEffect`). */
-const EFFECT_ON_ACCOUNT = `case
-  when t.type = 'transfer' and t.to_account_id = a.id then t.amount_minor
-  when t.type = 'transfer' then -t.amount_minor
-  when t.type in ('income', 'lending_in') then t.amount_minor
-  else -t.amount_minor end`
-
-/** Signed effect on the total balance (transfers net to zero). */
-const EFFECT_ON_TOTAL = `case
-  when t.type = 'transfer' then 0
-  when t.type in ('income', 'lending_in') then t.amount_minor
-  else -t.amount_minor end`
+/** PowerSync legacy timestamps use a space separator; normalize so ordering and parsing are correct. */
+const AT = `replace(t.occurred_at, ' ', 'T')`
 
 const ACCOUNTS_WITH_BALANCE = `
   select a.id, a.name, a.type, a.color, a.icon, a.sort_order, a.opening_balance_minor,
     (a.archived_at is not null) as archived,
-    a.opening_balance_minor + coalesce((
-      select sum(${EFFECT_ON_ACCOUNT}) from transactions t
-      where t.deleted_at is null and (t.account_id = a.id or t.to_account_id = a.id)
-    ), 0) as balance_minor
+    a.opening_balance_minor
+      + coalesce((select sum(case when t.type in ('income', 'lending_in') then t.amount_minor else -t.amount_minor end)
+          from transactions t where t.deleted_at is null and t.account_id = a.id), 0)
+      + coalesce((select sum(t.amount_minor)
+          from transactions t where t.deleted_at is null and t.type = 'transfer' and t.to_account_id = a.id), 0)
+      as balance_minor
   from accounts a
   where a.deleted_at is null`
 
@@ -89,7 +81,7 @@ export const Q = {
   /** params: [startDay, endDay] → TransactionView[], newest first. */
   transactionsBetween: `
     select t.id, t.type, t.amount_minor, t.account_id, t.to_account_id, t.category_id, t.party_id,
-      t.occurred_on, t.occurred_at, t.note, t.original_amount_minor, t.original_currency, t.fx_rate,
+      t.occurred_on, ${AT} as occurred_at, t.note, t.original_amount_minor, t.original_currency, t.fx_rate,
       c.name as category_name, c.icon as category_icon, c.color as category_color,
       a.name as account_name, ta.name as to_account_name, p.name as party_name
     from transactions t
@@ -98,7 +90,7 @@ export const Q = {
       left join accounts ta on ta.id = t.to_account_id
       left join parties p on p.id = t.party_id
     where t.deleted_at is null and t.occurred_on between ? and ?
-    order by t.occurred_on desc, t.occurred_at desc`,
+    order by t.occurred_on desc, ${AT} desc`,
 
   /** params: [startDay, endDay] → { income, expense } (spending excludes transfers, EMIs and lending). */
   monthSummary: `select
@@ -107,18 +99,26 @@ export const Q = {
     from transactions where deleted_at is null and occurred_on between ? and ?`,
 
   /** params: [sinceDay] → rows for @hisab/core rankSuggestions/rankCategories. */
-  suggestionHistory: `select category_id, amount_minor, note, occurred_at from transactions
-    where deleted_at is null and type = 'expense' and category_id is not null and occurred_on >= ?`,
+  suggestionHistory: `select t.category_id, t.amount_minor, t.note, ${AT} as occurred_at from transactions t
+    where t.deleted_at is null and t.type = 'expense' and t.category_id is not null and t.occurred_on >= ?`,
 
   /** params: [categoryId] → { account_id } of the most recent use. */
-  lastAccountForCategory: `select account_id from transactions
-    where deleted_at is null and category_id = ? order by occurred_at desc limit 1`,
+  lastAccountForCategory: `select t.account_id from transactions t
+    where t.deleted_at is null and t.category_id = ? order by ${AT} desc limit 1`,
 
-  /** params: [sinceDay] → { day, net }[] ascending: daily change of the total (for the trend line). */
-  dailyNet: `select t.occurred_on as day, sum(${EFFECT_ON_TOTAL}) as net
-    from transactions t join accounts a on a.id = t.account_id
-    where t.deleted_at is null and a.archived_at is null and t.occurred_on >= ? and t.type <> 'transfer'
-    group by t.occurred_on order by t.occurred_on`,
+  /** params: [sinceDay] → { day, net }[] ascending: daily change of the active-accounts total (trend line).
+   * Counts each side of a transfer only if that account is active, so moving money out of (or into)
+   * an archived account moves the total like it really does. */
+  dailyNet: `select day, sum(delta) as net from (
+      select t.occurred_on as day,
+        case when t.type in ('income', 'lending_in') then t.amount_minor else -t.amount_minor end as delta
+      from transactions t join accounts a on a.id = t.account_id
+      where t.deleted_at is null and a.deleted_at is null and a.archived_at is null and t.occurred_on >= ?1
+      union all
+      select t.occurred_on, t.amount_minor
+      from transactions t join accounts a on a.id = t.to_account_id
+      where t.deleted_at is null and t.type = 'transfer' and a.deleted_at is null and a.archived_at is null and t.occurred_on >= ?1
+    ) group by day having sum(delta) <> 0 order by day`,
 
   profile: `select * from profiles limit 1`,
 } as const
