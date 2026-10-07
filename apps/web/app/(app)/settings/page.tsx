@@ -9,7 +9,7 @@ export const instant = false
 export default function SettingsPage() {
   return (
     <div className="mx-auto w-full max-w-6xl">
-      <PageHeader title="Settings" />
+      <PageHeader title="Settings" description="Accounts, preferences and your data." />
       <SettingsView />
     </div>
   )

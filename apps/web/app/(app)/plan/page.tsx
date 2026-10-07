@@ -9,7 +9,7 @@ export const instant = false
 export default function PlanPage() {
   return (
     <div className="mx-auto w-full max-w-6xl">
-      <PageHeader title="Plan" />
+      <PageHeader title="Plan" description="Budgets, bills that repeat, and loans." />
       <PlanView />
     </div>
   )

@@ -5,6 +5,7 @@ import { Q } from '@hisab/db'
 import { useQuery } from '@powersync/react'
 import { useEffect, useState } from 'react'
 import { useUserId } from '@/lib/powersync/provider'
+import { getSupabase } from '@/lib/supabase/client'
 
 export interface Profile {
   userId: string
@@ -42,4 +43,19 @@ export function useToday(timeZone: string): string {
     }
   }, [timeZone])
   return today
+}
+
+/** The signed-in email (read from the local session; no network). */
+export function useUserEmail(): string | null {
+  const [email, setEmail] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    void getSupabase()
+      .auth.getSession()
+      .then(({ data }) => live && setEmail(data.session?.user.email ?? null))
+    return () => {
+      live = false
+    }
+  }, [])
+  return email
 }

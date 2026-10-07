@@ -9,7 +9,7 @@ export const instant = false
 export default function ReportsPage() {
   return (
     <div className="mx-auto w-full max-w-6xl">
-      <PageHeader title="Monthly report" />
+      <PageHeader title="Monthly report" description="Where the money came from and where it went." />
       <ReportView />
     </div>
   )

@@ -9,7 +9,7 @@ export const instant = false
 export default function PeoplePage() {
   return (
     <div className="mx-auto w-full max-w-6xl">
-      <PageHeader title="People" />
+      <PageHeader title="People" description="Money you’ve lent and borrowed." />
       <PeopleView />
     </div>
   )

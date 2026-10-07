@@ -9,7 +9,7 @@ export const instant = false
 export default function ActivityPage() {
   return (
     <div className="mx-auto w-full max-w-6xl">
-      <PageHeader title="Activity" />
+      <PageHeader title="Activity" description="Every entry, grouped by day." />
       <ActivityTable />
     </div>
   )

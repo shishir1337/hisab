@@ -12,20 +12,21 @@ const DOT: Record<SyncStatusKind, string> = {
   local: 'bg-text-faint',
 }
 
-/** Subtle sync indicator (spec §9): never a spinner, never blocking. */
-export function SyncPill({ compact = false }: { compact?: boolean }) {
+const EXPLAIN: Record<SyncStatusKind, string> = {
+  ok: 'All changes are saved and synced.',
+  syncing: 'Saving your latest changes to the cloud…',
+  offline: 'You’re offline. Changes are saved in this browser and will sync when you’re back online.',
+  issues: 'Some changes couldn’t sync. See Settings → Your data.',
+  local: 'Sync isn’t set up yet — your data is saved in this browser.',
+}
+
+/** Subtle sync indicator (spec §9): a dot and a short label, never a spinner, never blocking. */
+export function SyncStatus({ className }: { className?: string }) {
   const { kind, label } = useSyncStatus()
   return (
-    <span
-      role="status"
-      title={kind === 'local' ? 'Sync is not set up yet — data is saved in this browser.' : label}
-      className={cn(
-        'inline-flex items-center gap-2 rounded-full text-[12px] text-text-muted',
-        compact ? 'px-2 py-1' : 'self-start border border-border bg-surface px-2.5 py-1',
-      )}
-    >
-      <span className={cn('size-1.5 rounded-full', DOT[kind])} aria-hidden />
-      <span className={cn(compact && 'sr-only')}>{label}</span>
+    <span role="status" title={EXPLAIN[kind]} className={cn('inline-flex min-w-0 items-center gap-1.5 text-[12px] text-text-muted', className)}>
+      <span className={cn('size-1.5 shrink-0 rounded-full', DOT[kind])} aria-hidden />
+      <span className="truncate">{label}</span>
     </span>
   )
 }
