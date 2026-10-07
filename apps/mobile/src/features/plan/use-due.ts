@@ -8,6 +8,7 @@ export type DueItem =
   | { key: string; kind: 'emi'; date: string; overdue: boolean; loan: LoanWithPayments; progress: LoanProgress }
 
 const LOOKAHEAD_DAYS = 7
+const MAX_PER_RULE = 3
 
 /** Everything needing attention in the next 7 days or overdue (spec §6.5 "Due soon"), oldest first. */
 export function useDueItems(today: string, timeZone: string): DueItem[] {
@@ -30,7 +31,8 @@ export function useDueItems(today: string, timeZone: string): DueItem[] {
         today,
         LOOKAHEAD_DAYS,
       )
-      for (const d of due) items.push({ key: `r:${rule.id}:${d.date}`, kind: 'recurring', date: d.date, overdue: d.overdue, rule })
+      // A long-ignored weekly item shouldn't flood the strip: show its 3 most recent.
+      for (const d of due.slice(-MAX_PER_RULE)) items.push({ key: `r:${rule.id}:${d.date}`, kind: 'recurring', date: d.date, overdue: d.overdue, rule })
     }
 
     const horizon = addDays(today, LOOKAHEAD_DAYS)

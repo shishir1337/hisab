@@ -29,6 +29,7 @@ export default function BudgetScreen() {
   const [categoryId, setCategoryId] = useState<string | null>(params.category ? params.category : null)
   const [amount, setAmount] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const target = overall ? null : categoryId
   const current = overall || target ? budgets.find((b) => (b.category_id ?? null) === target) : undefined
 
@@ -42,9 +43,11 @@ export default function BudgetScreen() {
   }, [key, current, isLoading])
 
   const save = async () => {
+    if (busy) return
     if (!overall && !categoryId) return setError('Pick a category')
     const parsed = parseAmount(amount)
     if (!parsed.ok) return setError('Enter a monthly amount')
+    setBusy(true)
     await setBudget(db, userId, target, parsed.minor)
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     router.back()
@@ -72,7 +75,9 @@ export default function BudgetScreen() {
       <Label hint={overall ? 'Everything you spend in a month' : 'Per month'}>Budget</Label>
       <AmountField value={amount} onChange={(v) => (setAmount(v), setError(null))} currency={currency} accessibilityLabel="Monthly budget" />
       <ErrorLine message={error} />
-      <Button onPress={() => void save()}>Save budget</Button>
+      <Button onPress={() => void save()} loading={busy}>
+        Save budget
+      </Button>
       {current && (
         <View className="mt-2">
           <Button variant="ghost" onPress={() => void remove()}>

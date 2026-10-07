@@ -163,3 +163,90 @@ describe('budgets', () => {
     expect(await db.getAll(QP.budgetsWithSpent, ['2026-10-01', '2026-10-31'])).toHaveLength(1)
   })
 })
+
+import { restoreTransaction, softDeleteTransaction, updateTransaction } from '../src/mutations'
+import { updateRecurringRule } from '../src/plan-mutations'
+
+describe('m3 review fixes', () => {
+  const rent = () => ({
+    type: 'expense' as const,
+    amount_minor: 2500000,
+    account_id: bank,
+    category_id: RENT,
+    frequency: 'monthly' as const,
+    interval: 1,
+    anchor_date: '2026-09-05',
+    mode: 'auto' as const,
+    created_on: '2026-09-01',
+  })
+  const txRows = () => db.getAll<{ id: string; amount_minor: number; occurrence_date: string | null; recurring_rule_id: string | null }>('select * from transactions where deleted_at is null order by occurrence_date')
+
+  it('editing a posted occurrence keeps its link — the rule does not post it again', async () => {
+    await createRecurringRule(db, USER, rent())
+    await postDueAutoRules(db, USER, '2026-09-10')
+    const [t] = await txRows()
+    await updateTransaction(db, t!.id, { type: 'expense', amount_minor: 2600000, account_id: bank, category_id: RENT, occurred_on: '2026-09-05', occurred_at: '2026-09-05T06:00:00.000Z' })
+    expect(await postDueAutoRules(db, USER, '2026-09-10')).toBe(0)
+    expect((await txRows()).map((r) => [r.amount_minor, r.occurrence_date])).toEqual([[2600000, '2026-09-05']])
+  })
+
+  it('deleting an auto-posted occurrence skips it (no re-post); restoring un-skips', async () => {
+    await createRecurringRule(db, USER, rent())
+    await postDueAutoRules(db, USER, '2026-09-10')
+    const [t] = await txRows()
+    await softDeleteTransaction(db, t!.id)
+    expect(await postDueAutoRules(db, USER, '2026-09-10')).toBe(0)
+    await restoreTransaction(db, t!.id)
+    expect(await db.getAll(QP.skippedOccurrences)).toEqual([])
+    expect(await txRows()).toHaveLength(1)
+  })
+
+  it('pause then resume does not back-post the missed months', async () => {
+    const id = await createRecurringRule(db, USER, rent())
+    await postDueAutoRules(db, USER, '2026-09-10')
+    await pauseRecurringRule(db, id, true, '2026-09-20')
+    await pauseRecurringRule(db, id, false, '2026-12-01')
+    expect(await postDueAutoRules(db, USER, '2026-12-01')).toBe(0)
+    expect(await postDueAutoRules(db, USER, '2026-12-05')).toBe(1)
+  })
+
+  it('changing the schedule does not backfill past dates', async () => {
+    const id = await createRecurringRule(db, USER, rent())
+    await postDueAutoRules(db, USER, '2026-09-10')
+    await updateRecurringRule(db, id, { ...rent(), anchor_date: '2026-08-25' }, '2026-09-10')
+    expect(await postDueAutoRules(db, USER, '2026-09-10')).toBe(0)
+    expect(await postDueAutoRules(db, USER, '2026-09-25')).toBe(1)
+  })
+
+  it('postOccurrence reports whether it created anything', async () => {
+    await createRecurringRule(db, USER, { ...rent(), mode: 'confirm' })
+    const rule = (await db.getAll<RecurringRuleView>(QP.recurringRules))[0]!
+    expect((await postOccurrence(db, USER, rule, '2026-09-05')).created).toBe(true)
+    expect((await postOccurrence(db, USER, rule, '2026-09-05', { amount_minor: 1 })).created).toBe(false)
+  })
+
+  it('legacy space-separated created_at still auto-posts', async () => {
+    const id = await createRecurringRule(db, USER, rent())
+    await db.execute("update recurring_rules set created_at = '2026-09-01 00:00:00Z' where id = ?", [id])
+    expect(await postDueAutoRules(db, USER, '2026-09-10', 'Asia/Dhaka')).toBe(1)
+  })
+
+  it('EMI numbering fills a gap left by a deleted payment and the loan can still finish', async () => {
+    const id = await createLoan(db, USER, { name: 'Bike', emi_amount_minor: 100, total_installments: 6, first_due_date: '2026-01-10', installments_paid_before: 2, default_account_id: cash })
+    const e3 = await markEmiPaid(db, USER, id, { occurred_on: '2026-03-10' })
+    await markEmiPaid(db, USER, id, { occurred_on: '2026-04-10' })
+    await softDeleteTransaction(db, e3)
+    await markEmiPaid(db, USER, id, { occurred_on: '2026-04-11' })
+    await markEmiPaid(db, USER, id, { occurred_on: '2026-05-10' })
+    await markEmiPaid(db, USER, id, { occurred_on: '2026-06-10' })
+    const nums = (await db.getAll<{ installment_number: number }>("select installment_number from transactions where type = 'emi' and deleted_at is null order by installment_number")).map((r) => r.installment_number)
+    expect(nums).toEqual([3, 4, 5, 6])
+    await expect(markEmiPaid(db, USER, id, { occurred_on: '2026-07-10' })).rejects.toThrow(/fully paid/i)
+  })
+
+  it('auto rules skip archived accounts instead of posting money that vanishes', async () => {
+    await createRecurringRule(db, USER, rent())
+    await db.execute('update accounts set archived_at = ? where id = ?', ['2026-09-01T00:00:00Z', bank])
+    expect(await postDueAutoRules(db, USER, '2026-09-10')).toBe(0)
+  })
+})

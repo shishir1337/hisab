@@ -46,7 +46,7 @@ export default function LoanScreen() {
       }
       const txId = await markEmiPaid(db, userId, loan.id, { occurred_on: today, amount_minor: amount })
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      toast({ message: `EMI ${p.paid + 1} of ${loan.total_installments} paid`, onUndo: () => softDeleteTransaction(db, txId) })
+      toast({ message: 'EMI marked paid', onUndo: () => softDeleteTransaction(db, txId) })
       setCustomAmount(null)
     } catch (e) {
       if (e instanceof Error && /account/i.test(e.message)) router.push({ pathname: '/loan-form', params: { id: loan.id } })

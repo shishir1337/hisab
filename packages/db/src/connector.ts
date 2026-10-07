@@ -21,7 +21,7 @@ export function isPermanentError(code: string | undefined, message = ''): boolea
 }
 
 /** Unique indexes that de-duplicate the same post from two devices: the row already exists server-side. */
-const DEDUPE_INDEXES = ['tx_recurring_once', 'tx_installment_once']
+const DEDUPE_INDEXES = ['tx_recurring_once', 'tx_installment_once', 'recurring_skips_once', 'budgets_one_per_category']
 function isAlreadyPosted(error: { code?: string; message: string }): boolean {
   return error.code === '23505' && DEDUPE_INDEXES.some((i) => error.message.includes(i))
 }

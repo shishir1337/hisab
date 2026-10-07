@@ -54,6 +54,7 @@ export default function RecurringScreen() {
   const [auto, setAuto] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const loaded = useRef(false)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (loaded.current) return
@@ -77,6 +78,7 @@ export default function RecurringScreen() {
   }, [existing, id, accounts])
 
   const save = async () => {
+    if (busy) return
     const parsed = parseAmount(amount)
     if (!parsed.ok) return setError('Enter the amount')
     if (!accountId) return setError('Add an account first')
@@ -93,13 +95,15 @@ export default function RecurringScreen() {
       anchor_date: anchor,
       mode: auto ? ('auto' as const) : ('confirm' as const),
     }
+    setBusy(true)
     try {
-      if (existing) await updateRecurringRule(db, existing.id, input)
+      if (existing) await updateRecurringRule(db, existing.id, input, today)
       else await createRecurringRule(db, userId, { ...input, created_on: today })
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       router.back()
     } catch (e) {
       setError(e instanceof ValidationError ? e.issues[0]!.message : 'Couldn’t save. Try again.')
+      setBusy(false)
     }
   }
 
@@ -198,7 +202,9 @@ export default function RecurringScreen() {
       </View>
 
       <ErrorLine message={error} />
-      <Button onPress={() => void save()}>{existing ? 'Save changes' : 'Add recurring item'}</Button>
+      <Button onPress={() => void save()} loading={busy}>
+        {existing ? 'Save changes' : 'Add recurring item'}
+      </Button>
       {existing && (
         <View className="mt-2">
           <Button variant="ghost" onPress={() => void remove()}>

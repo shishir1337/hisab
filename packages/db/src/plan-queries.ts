@@ -15,6 +15,7 @@ export interface RecurringRuleView {
   end_date: string | null
   mode: 'confirm' | 'auto'
   paused_at: string | null
+  due_from: string | null
   created_at: string
   category_name: string | null
   category_icon: string | null
@@ -64,7 +65,7 @@ const LOANS = `
 export const QP = {
   recurringRules: `
     select r.id, r.type, r.amount_minor, r.account_id, r.to_account_id, r.category_id, r.party_id, r.note, r.frequency,
-      r.interval, r.anchor_date, r.end_date, r.mode, r.paused_at, r.created_at,
+      r.interval, r.anchor_date, r.end_date, r.mode, r.paused_at, r.due_from, r.created_at,
       c.name as category_name, c.icon as category_icon, c.color as category_color,
       a.name as account_name, ta.name as to_account_name, p.name as party_name
     from recurring_rules r

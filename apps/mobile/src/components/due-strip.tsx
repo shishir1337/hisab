@@ -59,11 +59,11 @@ function DueCard({ item, today }: { item: DueItem; today: string }) {
     busy.current = true
     try {
       if (item.kind === 'recurring') {
-        const id = await postOccurrence(db, userId, item.rule, item.date, { occurred_on: item.date > today ? today : item.date })
-        toast({ message: `Recorded · ${title}`, onUndo: () => softDeleteTransaction(db, id) })
+        const r = await postOccurrence(db, userId, item.rule, item.date, { occurred_on: item.date > today ? today : item.date })
+        toast(r.created ? { message: `Recorded · ${title}`, onUndo: () => softDeleteTransaction(db, r.id) } : { message: 'Already recorded' })
       } else {
         const id = await markEmiPaid(db, userId, item.loan.id, { occurred_on: today })
-        toast({ message: `EMI ${item.progress.paid + 1} paid · ${title}`, onUndo: () => softDeleteTransaction(db, id) })
+        toast({ message: `EMI paid · ${title}`, onUndo: () => softDeleteTransaction(db, id) })
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     } catch (e) {

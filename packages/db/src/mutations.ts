@@ -67,23 +67,67 @@ export async function createTransaction(ex: Executor, userId: string, input: Tra
   return id
 }
 
-/** Full replace: columns not relevant to the (possibly changed) type become NULL. */
+/** Columns tying a row to a recurring rule / loan / lending: an edit never changes them. */
+const LINK_COLUMNS = new Set<string>(['recurring_rule_id', 'occurrence_date', 'loan_id', 'installment_number', 'lending_id'])
+const EDITABLE_COLUMNS = TX_COLUMNS.filter((c) => !LINK_COLUMNS.has(c))
+
+/**
+ * Replaces the user-editable fields (fields not relevant to a changed type become NULL) and keeps the
+ * row's links, so editing a posted salary/EMI never detaches it from its rule or loan.
+ */
 export async function updateTransaction(ex: Executor, id: string, input: TransactionDraft): Promise<void> {
-  const values = txValues(input)
-  await ex.execute(`update transactions set ${TX_COLUMNS.map((c) => `${c} = ?`).join(', ')}, updated_at = ? where id = ?`, [
-    ...values,
-    now(),
-    id,
-  ])
+  const links = await ex.getOptional<Record<string, unknown>>(
+    'select recurring_rule_id, occurrence_date, loan_id, installment_number, lending_id from transactions where id = ?',
+    [id],
+  )
+  const kept = Object.fromEntries(Object.entries(links ?? {}).filter(([, v]) => v !== null))
+  // Validate the row as it will be stored (links included).
+  const all = txValues({ ...input, ...kept } as TransactionDraft)
+  const values = EDITABLE_COLUMNS.map((c) => all[TX_COLUMNS.indexOf(c)])
+  await ex.execute(`update transactions set ${EDITABLE_COLUMNS.map((c) => `${c} = ?`).join(', ')}, updated_at = ? where id = ?`, [...values, now(), id])
 }
 
+/**
+ * Soft delete. Deleting a posted recurring occurrence also marks that occurrence skipped, so auto mode
+ * won't post it again ("didn't come this month").
+ */
 export async function softDeleteTransaction(ex: Executor, id: string): Promise<void> {
   const ts = now()
   await ex.execute('update transactions set deleted_at = ?, updated_at = ? where id = ?', [ts, ts, id])
+  const row = await ex.getOptional<{ user_id: string; recurring_rule_id: string | null; occurrence_date: string | null }>(
+    'select user_id, recurring_rule_id, occurrence_date from transactions where id = ?',
+    [id],
+  )
+  if (!row?.recurring_rule_id || !row.occurrence_date) return
+  const exists = await ex.getOptional('select id from recurring_skips where rule_id = ? and occurrence_date = ? and deleted_at is null', [
+    row.recurring_rule_id,
+    row.occurrence_date,
+  ])
+  if (exists) return
+  await ex.execute('insert into recurring_skips (id, user_id, rule_id, occurrence_date, created_at, updated_at) values (?, ?, ?, ?, ?, ?)', [
+    newId(),
+    row.user_id,
+    row.recurring_rule_id,
+    row.occurrence_date,
+    ts,
+    ts,
+  ])
 }
 
 export async function restoreTransaction(ex: Executor, id: string): Promise<void> {
-  await ex.execute('update transactions set deleted_at = null, updated_at = ? where id = ?', [now(), id])
+  const ts = now()
+  await ex.execute('update transactions set deleted_at = null, updated_at = ? where id = ?', [ts, id])
+  const row = await ex.getOptional<{ recurring_rule_id: string | null; occurrence_date: string | null }>(
+    'select recurring_rule_id, occurrence_date from transactions where id = ?',
+    [id],
+  )
+  if (!row?.recurring_rule_id || !row.occurrence_date) return
+  await ex.execute('update recurring_skips set deleted_at = ?, updated_at = ? where rule_id = ? and occurrence_date = ? and deleted_at is null', [
+    ts,
+    ts,
+    row.recurring_rule_id,
+    row.occurrence_date,
+  ])
 }
 
 export async function createAccount(ex: Executor, userId: string, input: z.input<typeof accountInput>): Promise<string> {

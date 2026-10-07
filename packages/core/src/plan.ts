@@ -32,6 +32,8 @@ export interface DueRule extends RecurrenceRule {
   /** Local day the rule was created; earlier occurrences are never shown as due. */
   created_on: string
   paused: boolean
+  /** Set on resume / schedule change: nothing earlier is ever due again. */
+  due_from?: string | null
 }
 
 /** Unposted, unskipped occurrences up to `lookaheadDays` ahead (spec §6.5). */
@@ -43,7 +45,7 @@ export function dueOccurrences(
   lookaheadDays = 7,
 ): { date: string; overdue: boolean }[] {
   if (rule.paused) return []
-  const start = rule.anchor_date > rule.created_on ? rule.anchor_date : rule.created_on
+  const start = [rule.anchor_date, rule.created_on, rule.due_from ?? ''].reduce((a, b) => (b > a ? b : a))
   return occurrences(rule, start, addDays(today, lookaheadDays))
     .filter((d) => !posted.has(d) && !skipped.has(d))
     .map((date) => ({ date, overdue: date < today }))

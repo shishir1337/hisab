@@ -3,12 +3,13 @@ import { postDueAutoRules } from '@hisab/db'
 import { usePowerSync } from '@powersync/react'
 import { useEffect } from 'react'
 import { AppState } from 'react-native'
-import { useProfile } from '@/lib/profile'
+import { useProfile, useToday } from '@/lib/profile'
 
 /** Posts due "Record automatically" items on launch and whenever the app returns to the foreground (spec §6.5). */
 export function useAutoPostRecurring() {
   const db = usePowerSync()
   const { userId, timeZone } = useProfile()
+  const today = useToday(timeZone)
 
   useEffect(() => {
     if (!userId) return
@@ -29,5 +30,6 @@ export function useAutoPostRecurring() {
       if (s === 'active') void run()
     })
     return () => sub.remove()
-  }, [db, userId, timeZone])
+    // `today` re-runs it after midnight while the app stays open.
+  }, [db, userId, timeZone, today])
 }

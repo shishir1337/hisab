@@ -31,10 +31,12 @@ export async function updateSession(request: NextRequest) {
   const path = request.nextUrl.pathname
 
   // A sign-in link that landed on the Site URL root (e.g. redirect URL not allow-listed): finish it.
-  if (!path.startsWith('/auth') && (request.nextUrl.searchParams.has('code') || request.nextUrl.searchParams.has('token_hash'))) {
+  if (path === '/' && (request.nextUrl.searchParams.has('code') || request.nextUrl.searchParams.has('token_hash'))) {
     const url = request.nextUrl.clone()
     url.pathname = '/auth/callback'
-    return NextResponse.redirect(url)
+    const forward = NextResponse.redirect(url)
+    for (const c of response.cookies.getAll()) forward.cookies.set(c)
+    return forward
   }
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`))
 

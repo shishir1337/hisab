@@ -32,6 +32,7 @@ export default function LoanFormScreen() {
   const [accountId, setAccountId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const loaded = useRef(false)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (!existing || loaded.current) return
@@ -51,7 +52,9 @@ export default function LoanFormScreen() {
     : null
 
   const save = async () => {
+    if (busy) return
     if (!parsedEmi.ok) return setError('Enter the monthly EMI amount')
+    setBusy(true)
     try {
       let partyId = existing?.party_id ?? null
       if (lender.trim() && lender.trim() !== existing?.party_name) partyId = await createParty(db, userId, { name: lender.trim(), kind: 'company' })
@@ -76,6 +79,7 @@ export default function LoanFormScreen() {
       router.back()
     } catch (e) {
       setError(e instanceof ValidationError ? (e.messageFor('name') ? 'Give the loan a name' : e.issues[0]!.message) : 'Couldn’t save. Try again.')
+      setBusy(false)
     }
   }
 
@@ -121,7 +125,9 @@ export default function LoanFormScreen() {
       )}
 
       <ErrorLine message={error} />
-      <Button onPress={() => void save()}>{existing ? 'Save changes' : 'Add loan'}</Button>
+      <Button onPress={() => void save()} loading={busy}>
+        {existing ? 'Save changes' : 'Add loan'}
+      </Button>
     </FormScreen>
   )
 }

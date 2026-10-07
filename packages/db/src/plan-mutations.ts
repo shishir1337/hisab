@@ -1,6 +1,6 @@
-import { dueOccurrences, localDate } from '@hisab/core'
+import { dueOccurrences, isoInstant, localDate } from '@hisab/core'
 import type { z } from 'zod'
-import type { Executor } from './executor'
+import { atomic, type Executor } from './executor'
 import { newId } from './ids'
 import { createTransaction, ValidationError } from './mutations'
 import { QP, type RecurringRuleView } from './plan-queries'
@@ -43,14 +43,36 @@ export async function createRecurringRule(ex: Executor, userId: string, input: R
   return id
 }
 
-export async function updateRecurringRule(ex: Executor, id: string, input: RecurringRuleInput): Promise<void> {
-  const { values } = ruleValues(input)
-  await ex.execute(`update recurring_rules set ${RULE_COLUMNS.map((c) => `${c} = ?`).join(', ')}, updated_at = ? where id = ?`, [...values, now(), id])
+/**
+ * Updates a rule. If the schedule (frequency / interval / first date) changes, nothing before `today`
+ * becomes due, so a reschedule never back-posts. `end_date` is kept unless the input sets it.
+ */
+export async function updateRecurringRule(ex: Executor, id: string, input: RecurringRuleInput, today?: string): Promise<void> {
+  const before = await ex.getOptional<{ frequency: string; interval: number; anchor_date: string; end_date: string | null }>(
+    'select frequency, interval, anchor_date, end_date from recurring_rules where id = ?',
+    [id],
+  )
+  const merged = { ...input, end_date: input.end_date === undefined ? (before?.end_date ?? null) : input.end_date }
+  const { values } = ruleValues(merged)
+  const r = parse(recurringRuleInput, merged)
+  const scheduleChanged = Boolean(before) && (before!.frequency !== r.frequency || before!.interval !== r.interval || before!.anchor_date !== r.anchor_date)
+  const dueFrom = scheduleChanged ? (today ?? new Date().toISOString().slice(0, 10)) : null
+  await ex.execute(
+    `update recurring_rules set ${RULE_COLUMNS.map((c) => `${c} = ?`).join(', ')}, ${dueFrom ? 'due_from = ?, ' : ''}updated_at = ? where id = ?`,
+    [...values, ...(dueFrom ? [dueFrom] : []), now(), id],
+  )
 }
 
-export async function pauseRecurringRule(ex: Executor, id: string, paused: boolean): Promise<void> {
+/** Pause / resume. Resuming sets `due_from = today`: months missed while paused are never back-posted. */
+export async function pauseRecurringRule(ex: Executor, id: string, paused: boolean, today?: string): Promise<void> {
   const ts = now()
-  await ex.execute('update recurring_rules set paused_at = ?, updated_at = ? where id = ?', [paused ? ts : null, ts, id])
+  if (paused) await ex.execute('update recurring_rules set paused_at = ?, updated_at = ? where id = ?', [ts, ts, id])
+  else
+    await ex.execute('update recurring_rules set paused_at = null, due_from = ?, updated_at = ? where id = ?', [
+      today ?? new Date().toISOString().slice(0, 10),
+      ts,
+      id,
+    ])
 }
 
 export async function deleteRecurringRule(ex: Executor, id: string): Promise<void> {
@@ -68,33 +90,45 @@ export async function postOccurrence(
   rule: Pick<RecurringRuleView, 'id' | 'type' | 'amount_minor' | 'account_id' | 'to_account_id' | 'category_id' | 'party_id' | 'note'>,
   date: string,
   override: { amount_minor?: number; account_id?: string; occurred_on?: string } = {},
-): Promise<string> {
-  const existing = await ex.getOptional<{ id: string }>(
-    'select id from transactions where recurring_rule_id = ? and occurrence_date = ? and deleted_at is null',
-    [rule.id, date],
-  )
-  if (existing) return existing.id
-  const day = override.occurred_on ?? date
-  return createTransaction(ex, userId, {
-    type: rule.type,
-    amount_minor: override.amount_minor ?? rule.amount_minor,
-    account_id: override.account_id ?? rule.account_id,
-    to_account_id: rule.type === 'transfer' ? rule.to_account_id : null,
-    category_id: rule.type === 'transfer' ? null : rule.category_id,
-    party_id: rule.party_id,
-    note: rule.note,
-    occurred_on: day,
-    occurred_at: middayOf(day),
-    recurring_rule_id: rule.id,
-    occurrence_date: date,
+): Promise<{ id: string; created: boolean }> {
+  return atomic(ex, async (tx) => {
+    const existing = await tx.getOptional<{ id: string }>(
+      'select id from transactions where recurring_rule_id = ? and occurrence_date = ? and deleted_at is null',
+      [rule.id, date],
+    )
+    if (existing) return { id: existing.id, created: false }
+    const day = override.occurred_on ?? date
+    const id = await createTransaction(tx, userId, {
+      type: rule.type,
+      amount_minor: override.amount_minor ?? rule.amount_minor,
+      account_id: override.account_id ?? rule.account_id,
+      to_account_id: rule.type === 'transfer' ? rule.to_account_id : null,
+      category_id: rule.type === 'transfer' ? null : rule.category_id,
+      party_id: rule.party_id,
+      note: rule.note,
+      occurred_on: day,
+      occurred_at: middayOf(day),
+      recurring_rule_id: rule.id,
+      occurrence_date: date,
+    })
+    return { id, created: true }
   })
 }
 
 export async function skipOccurrence(ex: Executor, userId: string, ruleId: string, date: string): Promise<void> {
-  const existing = await ex.getOptional('select id from recurring_skips where rule_id = ? and occurrence_date = ? and deleted_at is null', [ruleId, date])
-  if (existing) return
-  const ts = now()
-  await ex.execute('insert into recurring_skips (id, user_id, rule_id, occurrence_date, created_at, updated_at) values (?, ?, ?, ?, ?, ?)', [newId(), userId, ruleId, date, ts, ts])
+  await atomic(ex, async (tx) => {
+    const existing = await tx.getOptional('select id from recurring_skips where rule_id = ? and occurrence_date = ? and deleted_at is null', [ruleId, date])
+    if (existing) return
+    const ts = now()
+    await tx.execute('insert into recurring_skips (id, user_id, rule_id, occurrence_date, created_at, updated_at) values (?, ?, ?, ?, ?, ?)', [
+      newId(),
+      userId,
+      ruleId,
+      date,
+      ts,
+      ts,
+    ])
+  })
 }
 
 export async function unskipOccurrence(ex: Executor, ruleId: string, date: string): Promise<void> {
@@ -119,22 +153,27 @@ export function groupOccurrences(rows: { rule_id: string; occurrence_date: strin
 
 /** Posts every due occurrence (≤ today) of active auto-mode rules. Returns how many were posted. */
 export async function postDueAutoRules(ex: Executor, userId: string, today: string, timeZone = 'UTC'): Promise<number> {
-  const rules = (await ex.getAll<RecurringRuleView>(QP.recurringRules)).filter((r) => r.mode === 'auto' && !r.paused_at)
+  // Never auto-post into an archived account (the money would vanish from the totals).
+  const archived = new Set(
+    (await ex.getAll<{ id: string }>('select id from accounts where archived_at is not null or deleted_at is not null')).map((a) => a.id),
+  )
+  const rules = (await ex.getAll<RecurringRuleView>(QP.recurringRules)).filter(
+    (r) => r.mode === 'auto' && !r.paused_at && !archived.has(r.account_id) && !(r.to_account_id && archived.has(r.to_account_id)),
+  )
   if (rules.length === 0) return 0
   const posted = groupOccurrences(await ex.getAll(QP.postedOccurrences))
   const skipped = groupOccurrences(await ex.getAll(QP.skippedOccurrences))
   let count = 0
   for (const r of rules) {
     const due = dueOccurrences(
-      { ...r, created_on: localDate(new Date(r.created_at), timeZone), paused: false },
+      { ...r, created_on: localDate(new Date(isoInstant(r.created_at)), timeZone), paused: false },
       posted.get(r.id) ?? new Set(),
       skipped.get(r.id) ?? new Set(),
       today,
       0,
     )
     for (const d of due) {
-      await postOccurrence(ex, userId, r, d.date)
-      count++
+      if ((await postOccurrence(ex, userId, r, d.date)).created) count++
     }
   }
   return count
@@ -181,8 +220,14 @@ export async function markEmiPaid(
       [loanId],
     )
     if (!loan) throw new Error('Loan not found')
-    const last = await ex.getOptional<{ n: number | null }>("select max(installment_number) as n from transactions where loan_id = ? and type = 'emi' and deleted_at is null", [loanId])
-    const next = Math.max(loan.installments_paid_before, last?.n ?? 0) + 1
+    // Smallest free installment number above those paid before Hisab (fills gaps left by deleted payments).
+    const used = new Set(
+      (await ex.getAll<{ n: number }>("select installment_number as n from transactions where loan_id = ? and type = 'emi' and deleted_at is null", [loanId])).map(
+        (r) => r.n,
+      ),
+    )
+    let next = loan.installments_paid_before + 1
+    while (used.has(next)) next++
     if (next > loan.total_installments) throw new Error('This loan is already fully paid')
     const accountId = opts.account_id ?? loan.default_account_id
     if (!accountId) throw new Error('Pick the account the EMI was paid from')
@@ -209,6 +254,10 @@ export async function markEmiPaid(
 /** One active budget per category (null = overall monthly budget); setting again updates it. */
 export async function setBudget(ex: Executor, userId: string, categoryId: string | null, amountMinor: number): Promise<void> {
   if (!Number.isInteger(amountMinor) || amountMinor <= 0) throw new Error('Budget must be greater than 0')
+  await atomic(ex, (tx) => upsertBudget(tx, userId, categoryId, amountMinor))
+}
+
+async function upsertBudget(ex: Executor, userId: string, categoryId: string | null, amountMinor: number): Promise<void> {
   const existing = await ex.getOptional<{ id: string }>(
     'select id from budgets where deleted_at is null and coalesce(category_id, \'\') = coalesce(?, \'\')',
     [categoryId],

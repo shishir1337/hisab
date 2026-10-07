@@ -105,6 +105,7 @@ const recurring_rules = new Table({
   end_date: column.text,
   mode: column.text,
   paused_at: column.text,
+  due_from: column.text,
 })
 
 const recurring_skips = new Table(

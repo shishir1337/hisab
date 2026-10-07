@@ -1,5 +1,5 @@
 import { addDays, budgetProgress, loanProgress, monthRange, occurrences, safeToSpendPerDay } from '@hisab/core'
-import { pauseRecurringRule, QP, type BudgetWithSpent, type LoanWithPayments, type RecurringRuleView } from '@hisab/db'
+import { groupOccurrences, pauseRecurringRule, QP, type BudgetWithSpent, type LoanWithPayments, type RecurringRuleView } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
 import { router } from 'expo-router'
 import { ChevronRight, Pause, Play, Plus } from 'lucide-react-native'
@@ -117,6 +117,19 @@ function Recurring() {
   const { colors } = useTheme()
   const db = usePowerSync()
   const { data: rules } = useQuery<RecurringRuleView>(QP.recurringRules)
+  const { data: posted } = useQuery<{ rule_id: string; occurrence_date: string }>(QP.postedOccurrences)
+  const { data: skipped } = useQuery<{ rule_id: string; occurrence_date: string }>(QP.skippedOccurrences)
+  const done = (() => {
+    const p = groupOccurrences(posted)
+    for (const [k, v] of groupOccurrences(skipped)) p.set(k, new Set([...(p.get(k) ?? []), ...v]))
+    return p
+  })()
+  // Next unhandled occurrence: overdue ones count, already posted/skipped ones don't.
+  const nextFor = (r: RecurringRuleView) => {
+    if (r.paused_at) return null
+    const from = [r.anchor_date, r.due_from ?? ''].reduce((a, b) => (b > a ? b : a))
+    return occurrences(r, from, addDays(today, 800)).find((d) => !done.get(r.id)?.has(d)) ?? null
+  }
 
   return (
     <View className="gap-3">
@@ -126,7 +139,7 @@ function Recurring() {
       {rules.length > 0 && (
         <View className="rounded-card border border-border bg-surface px-3.5">
           {rules.map((r, i) => {
-            const next = r.paused_at ? null : occurrences(r, today, addDays(today, 800))[0]
+            const next = nextFor(r)
             const positive = r.type === 'income'
             return (
               <Pressable
@@ -151,7 +164,7 @@ function Recurring() {
                   accessibilityRole="button"
                   accessibilityLabel={r.paused_at ? 'Resume' : 'Pause'}
                   hitSlop={8}
-                  onPress={() => void pauseRecurringRule(db, r.id, !r.paused_at)}
+                  onPress={() => void pauseRecurringRule(db, r.id, !r.paused_at, today)}
                   className="ml-2 h-9 w-9 items-center justify-center rounded-full bg-surface-muted"
                 >
                   {r.paused_at ? <Play size={14} color={colors.text} /> : <Pause size={14} color={colors.text} />}

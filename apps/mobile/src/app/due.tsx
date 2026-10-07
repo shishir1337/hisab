@@ -30,6 +30,7 @@ export default function DueScreen() {
   const [day, setDay] = useState(date && date < today ? date : today)
   const [error, setError] = useState<string | null>(null)
   const loaded = useRef(false)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     if (!rule || loaded.current) return
@@ -41,19 +42,24 @@ export default function DueScreen() {
   if (!rule || !date) return <FormScreen title="Due">{null}</FormScreen>
 
   const record = async () => {
+    if (busy) return
     const parsed = parseAmount(amount)
     if (!parsed.ok) return setError('Enter the amount')
+    setBusy(true)
     try {
-      const id = await postOccurrence(db, userId, rule, date, { amount_minor: parsed.minor, account_id: accountId ?? rule.account_id, occurred_on: day })
+      const r = await postOccurrence(db, userId, rule, date, { amount_minor: parsed.minor, account_id: accountId ?? rule.account_id, occurred_on: day })
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      toast({ message: 'Recorded', onUndo: () => softDeleteTransaction(db, id) })
+      toast(r.created ? { message: 'Recorded', onUndo: () => softDeleteTransaction(db, r.id) } : { message: 'Already recorded' })
       router.back()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Couldn’t record it')
+      setBusy(false)
     }
   }
 
   const skip = async () => {
+    if (busy) return
+    setBusy(true)
     await skipOccurrence(db, userId, rule.id, date)
     toast({ message: `Skipped ${formatDay(date)}`, onUndo: () => unskipOccurrence(db, rule.id, date) })
     router.back()
@@ -86,9 +92,11 @@ export default function DueScreen() {
       <DateStepper value={day} onChange={(d) => setDay(d > today ? today : d)} today={today} />
 
       <ErrorLine message={error} />
-      <Button onPress={() => void record()}>Record</Button>
+      <Button onPress={() => void record()} loading={busy}>
+        Record
+      </Button>
       <View className="mt-2">
-        <Button variant="ghost" onPress={() => void skip()}>
+        <Button variant="ghost" disabled={busy} onPress={() => void skip()}>
           Skip this one
         </Button>
       </View>

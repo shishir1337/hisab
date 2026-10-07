@@ -176,3 +176,13 @@ describe('categories never overwrite the server copy', () => {
     expect(calls).toEqual([{ table: 'categories', payload: { name: 'Food', id: 'c1' }, opts: { onConflict: 'id', ignoreDuplicates: true } }])
   })
 })
+
+describe('more dedupe', () => {
+  it.each(['recurring_skips_once', 'budgets_one_per_category'])('%s duplicate is done, not an issue', async (index) => {
+    const sb = fakeSupabase(() => ({ code: '23505', message: `duplicate key value violates unique constraint "${index}"` }))
+    const { db, complete, execute } = fakeDb([{ op: UpdateType.PUT, table: 'x', id: '1', opData: {} }])
+    await new SupabaseConnector(sb.client, {}).uploadData(db)
+    expect(execute).not.toHaveBeenCalled()
+    expect(complete).toHaveBeenCalledOnce()
+  })
+})
