@@ -61,3 +61,19 @@ describe('monthRange', () => {
   it('october', () => expect(monthRange('2026-10-17')).toEqual({ start: '2026-10-01', end: '2026-10-31' }))
   it('february leap year', () => expect(monthRange('2028-02-10')).toEqual({ start: '2028-02-01', end: '2028-02-29' }))
 })
+
+import { balanceSeries } from '../src/ledger'
+
+describe('balanceSeries', () => {
+  it('walks back from the current total using daily nets (end-of-day values, oldest first)', () => {
+    const series = balanceSeries(1000, [{ day: '2026-10-06', net: -100 }, { day: '2026-10-07', net: 500 }], '2026-10-07', 3)
+    expect(series).toEqual([
+      { day: '2026-10-05', balance: 600 },
+      { day: '2026-10-06', balance: 500 },
+      { day: '2026-10-07', balance: 1000 },
+    ])
+  })
+  it('ignores future-dated entries when walking back', () => {
+    expect(balanceSeries(1000, [{ day: '2026-10-09', net: 50 }], '2026-10-07', 1)).toEqual([{ day: '2026-10-07', balance: 950 }])
+  })
+})
