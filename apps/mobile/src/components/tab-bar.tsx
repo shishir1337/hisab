@@ -87,16 +87,14 @@ export function TabBar({ state, navigation }: TabBarProps) {
               style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 }}
             >
               {/* Pill behind the active icon: Android's native tab language, in ink instead of a hue. */}
-              <View
-                style={{
-                  width: 56,
-                  height: 30,
-                  borderRadius: 15,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: focused ? (scheme === 'dark' ? colors.surfaceMuted : colors.border) : 'transparent',
-                }}
-              >
+              <View style={{ width: 56, height: 30, alignItems: 'center', justifyContent: 'center' }}>
+                {/* Mounted only when focused (keyed by theme): changing the background of a live view dropped its radius on Fabric. */}
+                {focused && (
+                  <View
+                    key={scheme}
+                    style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: 15, backgroundColor: scheme === 'dark' ? colors.surfaceMuted : colors.border }}
+                  />
+                )}
                 <Icon color={color} size={21} strokeWidth={focused ? 2.2 : 1.8} />
               </View>
               <Text style={{ color, fontSize: 11, fontWeight: focused ? '600' : '500', letterSpacing: 0.1 }}>{meta.label}</Text>

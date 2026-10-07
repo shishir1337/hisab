@@ -16,8 +16,11 @@ import * as Haptics from 'expo-haptics'
 import { Calendar, ChevronLeft, ChevronRight, Globe, Plus, StickyNote, Trash2, User, Wallet, X } from 'lucide-react-native'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { router } from 'expo-router'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { Pressable, Text, View } from 'react-native'
+// Gesture-handler's ScrollView cooperates with the sheet's pan gesture; RN's horizontal rows never scrolled.
+import { ScrollView } from 'react-native-gesture-handler'
 import { Button } from '@/components/button'
+import { Press } from '@/components/press'
 import { Chip } from '@/components/chip'
 import { IconTile } from '@/components/icon-tile'
 import { Keypad } from '@/components/keypad'
@@ -32,6 +35,10 @@ import { checkBudgetAlerts } from '@/features/notify/budget-alerts'
 
 type Panel = 'none' | 'categories' | 'account' | 'toAccount' | 'day' | 'note' | 'party' | 'fx'
 type AccountOption = { id: string; name: string; type: string }
+
+/** Chip rows run edge to edge and scroll under the sheet's side padding instead of being cut at it. */
+const BLEED = { marginHorizontal: -16 } as const
+const ROW = { gap: 8, paddingHorizontal: 16, paddingVertical: 2 } as const
 
 const FX_CURRENCIES = ['USD', 'EUR', 'GBP', 'AED', 'SAR', 'MYR', 'SGD', 'CAD', 'AUD', 'INR']
 const MISSING_HINT = {
@@ -227,8 +234,8 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
       {/* Suggested now — one tap logs (spec §6.7) */}
       {suggestions.length > 0 && form.keypad === '' && (
         <View>
-          <Text style={{ color: colors.textFaint, fontSize: 11.5, marginBottom: 6 }}>Suggested now · tap to log</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+          <Text style={{ color: colors.textFaint, fontSize: 12, fontWeight: '500', marginBottom: 8 }}>Suggested now · tap to log</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={BLEED} contentContainerStyle={ROW}>
             {suggestions.map((s) => {
               const c = byId.get(s.category_id)
               return (
@@ -246,7 +253,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
       )}
 
       {/* Amount */}
-      <View className="items-center py-1">
+      <View style={{ alignItems: 'center', paddingVertical: 10, minHeight: 72, justifyContent: 'center' }}>
         <Money
           reveal
           minor={typed ?? 0}
@@ -266,17 +273,17 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
       {/* What: categories, or from → to for transfers */}
       {form.type === 'transfer' ? (
         <View className="flex-row items-center gap-2">
-          <Chip label={account?.name ?? 'From'} icon={<Wallet size={14} color={colors.textMuted} />} selected={panel === 'account'} onPress={() => togglePanel('account')} />
+          <Chip label={account?.name ?? 'From'} icon={(c) => <Wallet size={14} color={c} />} selected={panel === 'account'} onPress={() => togglePanel('account')} />
           <ChevronRight size={16} color={colors.textFaint} />
           <Chip
             label={toAccount?.name ?? 'To account'}
-            icon={<Wallet size={14} color={colors.textMuted} />}
+            icon={(c) => <Wallet size={14} color={c} />}
             selected={panel === 'toAccount'}
             onPress={() => togglePanel('toAccount')}
           />
         </View>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={BLEED} contentContainerStyle={ROW}>
           {[...new Set([...(form.categoryId && !topCategoryIds.includes(form.categoryId) ? [form.categoryId] : []), ...topCategoryIds])].map((id) => {
             const c = byId.get(id)
             if (!c) return null
@@ -296,25 +303,30 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
 
       {/* Inline panels */}
       {panel === 'categories' && (
-        <View className="flex-row flex-wrap gap-2 rounded-[16px] bg-surface-muted p-3">
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 4, borderRadius: 16, backgroundColor: colors.surfaceMuted, paddingVertical: 8, paddingHorizontal: 4 }}>
           {categories.map((c) => (
-            <Pressable
+            <Press
               key={c.id}
               accessibilityRole="button"
+              accessibilityLabel={c.name}
               accessibilityState={{ selected: form.categoryId === c.id }}
+              haptic="selection"
+              feedback="scale"
               onPress={() => void selectCategory(c.id)}
-              className="w-[22%] items-center gap-1 py-1"
+              style={{ width: '25%', alignItems: 'center', gap: 6, paddingVertical: 8 }}
             >
-              <IconTile icon={c.icon} tint={c.color} size={40} />
-              <Text numberOfLines={1} style={{ fontSize: 11, color: form.categoryId === c.id ? colors.text : colors.textMuted, fontWeight: form.categoryId === c.id ? '700' : '500' }}>
+              <View style={{ borderRadius: 15, borderWidth: 2, borderColor: form.categoryId === c.id ? colors.text : 'transparent', padding: 1 }}>
+                <IconTile icon={c.icon} tint={c.color} size={40} />
+              </View>
+              <Text numberOfLines={1} style={{ fontSize: 11.5, maxWidth: '92%', color: form.categoryId === c.id ? colors.text : colors.textMuted, fontWeight: form.categoryId === c.id ? '700' : '500' }}>
                 {c.name}
               </Text>
-            </Pressable>
+            </Press>
           ))}
         </View>
       )}
       {(panel === 'account' || panel === 'toAccount') && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={BLEED} contentContainerStyle={ROW}>
           {accounts
             .filter((a) => panel === 'account' || a.id !== form.accountId)
             .map((a) => (
@@ -365,7 +377,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
       )}
       {panel === 'party' && (
         <View className="gap-2">
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={BLEED} contentContainerStyle={ROW}>
             {form.partyId && <Chip label="None" onPress={() => dispatch({ type: 'setParty', id: null })} />}
             {parties.map((p) => (
               <Chip key={p.id} label={p.name} selected={form.partyId === p.id} onPress={() => (dispatch({ type: 'setParty', id: p.id }), setPanel('none'))} />
@@ -409,7 +421,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
             <X size={14} color={colors.textMuted} />
             <Text style={{ color: colors.textMuted, fontSize: 12.5 }}>Received in {profile.currency} instead</Text>
           </Pressable>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={BLEED} contentContainerStyle={ROW}>
             {FX_CURRENCIES.map((c) => (
               <Chip key={c} size="sm" label={c} selected={form.fx?.currency === c} onPress={() => dispatch({ type: 'setFxCurrency', value: c })} />
             ))}
@@ -427,24 +439,26 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
       )}
 
       {/* Meta: account · day · note (· from · currency for income) */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={BLEED} contentContainerStyle={ROW}>
         {form.type !== 'transfer' && (
-          <Chip size="sm" icon={<Wallet size={13} color={colors.textMuted} />} label={account?.name ?? 'Account'} selected={panel === 'account'} onPress={() => togglePanel('account')} />
+          <Chip size="sm" tone="muted" icon={(c) => <Wallet size={14} color={c} />} label={account?.name ?? 'Account'} selected={panel === 'account'} onPress={() => togglePanel('account')} />
         )}
-        <Chip size="sm" icon={<Calendar size={13} color={colors.textMuted} />} label={dayLabel(form.day, today)} selected={panel === 'day'} onPress={() => togglePanel('day')} />
+        <Chip size="sm" tone="muted" icon={(c) => <Calendar size={14} color={c} />} label={dayLabel(form.day, today)} selected={panel === 'day'} onPress={() => togglePanel('day')} />
         <Chip
           size="sm"
-          icon={<StickyNote size={13} color={colors.textMuted} />}
+          tone="muted"
+          icon={(c) => <StickyNote size={14} color={c} />}
           label={form.note.trim() ? truncate(form.note.trim(), 18) : 'Note'}
           selected={panel === 'note'}
           onPress={() => togglePanel('note')}
         />
         {form.type === 'income' && (
           <>
-            <Chip size="sm" icon={<User size={13} color={colors.textMuted} />} label={party?.name ?? 'From'} selected={panel === 'party'} onPress={() => togglePanel('party')} />
+            <Chip size="sm" tone="muted" icon={(c) => <User size={14} color={c} />} label={party?.name ?? 'From'} selected={panel === 'party'} onPress={() => togglePanel('party')} />
             <Chip
               size="sm"
-              icon={<Globe size={13} color={colors.textMuted} />}
+              tone="muted"
+              icon={(c) => <Globe size={14} color={c} />}
               label={form.fx ? form.fx.currency : 'Other currency'}
               selected={panel === 'fx'}
               onPress={() => {
@@ -456,7 +470,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
         )}
       </ScrollView>
 
-      {panel !== 'note' && panel !== 'party' && panel !== 'fx' && <Keypad onKey={(key) => (dispatch({ type: 'key', key }), setHint(null))} />}
+      {panel !== 'note' && panel !== 'party' && panel !== 'fx' && panel !== 'categories' && <Keypad onKey={(key) => (dispatch({ type: 'key', key }), setHint(null))} />}
 
       <Text accessibilityLiveRegion="polite" style={{ color: colors.danger, fontSize: 12.5, minHeight: 16, textAlign: 'center' }}>
         {hint ?? ''}
@@ -464,14 +478,16 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
 
       <View className="flex-row gap-2">
         {editing && (
-          <Pressable
+          <Press
             accessibilityRole="button"
             accessibilityLabel="Delete transaction"
+            haptic="selection"
+            feedback="scale"
             onPress={() => void remove()}
-            className="h-[52px] w-[52px] items-center justify-center rounded-[14px] bg-surface-muted"
+            style={{ width: 52, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}
           >
             <Trash2 size={20} color={colors.danger} />
-          </Pressable>
+          </Press>
         )}
         <View className="flex-1">
           <Button onPress={save} loading={saving}>
@@ -484,10 +500,21 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
 }
 
 function IconButton({ label, onPress, disabled, children }: { label: string; onPress: () => void; disabled?: boolean; children: React.ReactNode }) {
+  const { colors } = useTheme()
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled} hitSlop={6} onPress={onPress} className="h-11 w-11 items-center justify-center rounded-[11px] bg-surface-muted">
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      hitSlop={4}
+      haptic="selection"
+      feedback="scale"
+      onPress={onPress}
+      style={{ width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted, opacity: disabled ? 0.5 : 1 }}
+    >
       {children}
-    </Pressable>
+    </Press>
   )
 }
 
