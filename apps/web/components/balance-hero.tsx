@@ -3,6 +3,7 @@
 import { addDays, balanceSeries, loanProgress } from '@hisab/core'
 import { Q, QL, QP, type LoanWithPayments } from '@hisab/db'
 import { useQuery } from '@powersync/react'
+import { Eye, EyeOff } from 'lucide-react'
 import { useMemo } from 'react'
 import { Money } from '@/components/money'
 import { usePrivacy } from '@/lib/privacy'
@@ -33,18 +34,23 @@ export function BalanceHero() {
       onClick={toggle}
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggle())}
       title={hidden ? 'Show amounts' : 'Hide amounts'}
-      className="hero-card relative cursor-pointer overflow-hidden rounded-hero p-5 select-none md:p-6"
+      className="hero-card group relative cursor-pointer overflow-hidden rounded-hero p-5 select-none md:p-6"
     >
-      <div aria-hidden className="pointer-events-none absolute -top-10 -right-10 size-36 rounded-full bg-[radial-gradient(rgba(255,255,255,0.10),transparent_70%)]" />
-      <p className="text-[12px] text-white/60">Total balance</p>
-      <Money minor={total} currency={currency} grouping={grouping} showDecimals="always" className="mt-0.5 block text-[32px] leading-tight font-semibold" />
-      {!hidden && <Sparkline values={series} />}
-      <div className="mt-4 grid grid-cols-2 gap-2 text-[12px]">
+      <div aria-hidden className="pointer-events-none absolute -top-16 -right-16 size-56 rounded-full bg-[radial-gradient(rgba(255,255,255,0.09),transparent_70%)]" />
+      <div className="flex items-center justify-between">
+        <p className="text-[13px] font-medium text-white/60">Total balance</p>
+        <span aria-hidden className="grid size-7 place-items-center rounded-full text-white/45 transition-colors group-hover:bg-white/10 group-hover:text-white/80">
+          {hidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+        </span>
+      </div>
+      <Money minor={total} currency={currency} grouping={grouping} className="mt-1 block text-[34px] leading-tight font-semibold tracking-[-0.03em] md:text-[38px]" />
+      {hidden ? <div className="mt-3 h-[36px]" aria-hidden /> : <Sparkline values={series} />}
+      <div className="mt-4 grid grid-cols-2 gap-2.5">
         <Tile label="Owed to you">
-          <Money minor={owed} currency={currency} grouping={grouping} className={owed > 0 ? 'font-semibold text-[#4ADE80]' : 'font-semibold'} />
+          <Money minor={owed} currency={currency} grouping={grouping} className={owed > 0 ? 'text-[#4ADE80]' : undefined} />
         </Tile>
         <Tile label="Loans left">
-          <Money minor={loansLeft} currency={currency} grouping={grouping} className="font-semibold" />
+          <Money minor={loansLeft} currency={currency} grouping={grouping} />
         </Tile>
       </div>
     </section>
@@ -53,9 +59,9 @@ export function BalanceHero() {
 
 function Tile({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-[12px] border border-white/[0.08] bg-white/[0.07] px-3 py-2">
-      <p className="text-white/55">{label}</p>
-      {children}
+    <div className="rounded-[14px] border border-white/[0.08] bg-white/[0.06] px-3.5 py-2.5">
+      <p className="text-[12px] text-white/55">{label}</p>
+      <p className="mt-0.5 text-[15px] font-semibold">{children}</p>
     </div>
   )
 }
@@ -63,13 +69,14 @@ function Tile({ label, children }: { label: string; children: React.ReactNode })
 function Sparkline({ values }: { values: number[] }) {
   if (values.length < 2) return null
   const w = 300
-  const h = 34
+  const h = 36
   const min = Math.min(...values)
-  const span = Math.max(...values) - min || 1
-  const pts = values.map((v, i) => [(i / (values.length - 1)) * w, h - 3 - ((v - min) / span) * (h - 6)] as const)
+  const span = Math.max(...values) - min
+  // A flat month draws a calm line through the middle rather than along the floor.
+  const pts = values.map((v, i) => [(i / (values.length - 1)) * w, span ? h - 3 - ((v - min) / span) * (h - 6) : h / 2] as const)
   const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="mt-2 h-[34px] w-full" aria-hidden>
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="mt-3 h-[36px] w-full" aria-hidden>
       <defs>
         <linearGradient id="hero-fill" x1="0" x2="0" y1="0" y2="1">
           <stop offset="0" stopColor="#fff" stopOpacity="0.18" />
