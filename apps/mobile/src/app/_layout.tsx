@@ -9,6 +9,7 @@ import { useEffect } from 'react'
 import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { PowerSyncProvider } from '@/lib/powersync'
+import { PrefsProvider } from '@/lib/prefs'
 import { SessionProvider, useSession } from '@/lib/session'
 import { ThemeProvider, useTheme } from '@/lib/theme'
 import { UndoProvider } from '@/lib/undo'
@@ -22,11 +23,13 @@ export default function RootLayout() {
         <ThemeProvider>
           <SessionProvider>
             <PowerSyncProvider>
-              <UndoProvider>
-                <BottomSheetModalProvider>
-                  <RootStack />
-                </BottomSheetModalProvider>
-              </UndoProvider>
+              <PrefsProvider>
+                <UndoProvider>
+                  <BottomSheetModalProvider>
+                    <RootStack />
+                  </BottomSheetModalProvider>
+                </UndoProvider>
+              </PrefsProvider>
             </PowerSyncProvider>
           </SessionProvider>
         </ThemeProvider>

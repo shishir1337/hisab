@@ -28,6 +28,7 @@ import { useTheme } from '@/lib/theme'
 import { useToast } from '@/lib/undo'
 import { formReducer, initialForm, toDraft, type QuickLogType } from './form'
 import type { OpenOptions } from './provider'
+import { checkBudgetAlerts } from '@/features/notify/budget-alerts'
 
 type Panel = 'none' | 'categories' | 'account' | 'toAccount' | 'day' | 'note' | 'party' | 'fx'
 type AccountOption = { id: string; name: string; type: string }
@@ -131,6 +132,9 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
       } else {
         const id = await createTransaction(db, profile.userId, draft)
         toast({ message: `Saved · ${label}`, onUndo: () => softDeleteTransaction(db, id) })
+        if (draft.type === 'expense' && draft.category_id) {
+          void checkBudgetAlerts(db, { category_id: draft.category_id, amount_minor: draft.amount_minor, occurred_on: draft.occurred_on }, profile.currency, profile.grouping).catch(() => {})
+        }
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       onDone()

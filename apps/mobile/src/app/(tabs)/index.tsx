@@ -1,13 +1,14 @@
 import { addDays, balanceSeries, loanProgress } from '@hisab/core'
 import { Q, QL, QP, type LoanWithPayments, type TransactionView } from '@hisab/db'
 import { useQuery } from '@powersync/react'
-import { router } from 'expo-router'
+import { router, useLocalSearchParams } from 'expo-router'
 import { Wallet } from 'lucide-react-native'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { Button } from '@/components/button'
 import { DueStrip } from '@/components/due-strip'
 import { HeroCard } from '@/components/hero-card'
+import { RemindersCard } from '@/components/reminders-card'
 import { Money } from '@/components/money'
 import { Screen } from '@/components/screen'
 import { SyncPill } from '@/components/sync-pill'
@@ -26,6 +27,14 @@ export default function HomeScreen() {
   const today = useToday(timeZone)
   const { colors } = useTheme()
   const quickLog = useQuickLog()
+  // The evening nudge notification links to "/?log=1": open quick log straight away.
+  const { log } = useLocalSearchParams<{ log?: string }>()
+  useEffect(() => {
+    if (log === '1') {
+      quickLog.open()
+      router.setParams({ log: undefined })
+    }
+  }, [log, quickLog])
 
   const { data: accounts, isLoading } = useQuery<{ id: string }>(Q.activeAccounts)
   const { data: totalRows } = useQuery<{ total: number }>(Q.totalBalance)
@@ -47,6 +56,8 @@ export default function HomeScreen() {
       ) : (
         <HeroCard total={total} series={series} owedToYou={lendingTotals[0]?.owed_to_me ?? 0} loansLeft={loansLeft} currency={currency} grouping={grouping} />
       )}
+
+      {accounts.length > 0 && <RemindersCard />}
 
       <DueStrip items={due} today={today} />
 
