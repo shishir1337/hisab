@@ -46,25 +46,32 @@ export async function reconcile(plan: PlannedNotification[]): Promise<void> {
 
   for (const [id, s] of have) {
     const target = want.get(id)
-    const same = target && s.content.title === target.title && s.content.body === target.body
+    // Same id but a different time (e.g. nudge hour changed) must be rescheduled too.
+    const same = target && s.content.title === target.title && s.content.body === target.body && s.content.data?.at === target.fireAt.toISOString()
     if (!same) await Notifications.cancelScheduledNotificationAsync(id)
     else want.delete(id)
   }
   for (const n of want.values()) {
     await Notifications.scheduleNotificationAsync({
       identifier: n.id,
-      content: { title: n.title, body: n.body, data: { link: n.deepLink } },
+      content: { title: n.title, body: n.body, data: { link: n.deepLink, at: n.fireAt.toISOString() } },
       trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: n.fireAt, channelId: CHANNEL_ID },
     })
   }
 }
 
+/** Cancels every reminder this app scheduled (sign-out: never show the previous user's money). */
+export async function cancelOwnNotifications(): Promise<void> {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync()
+  for (const s of scheduled) if (OWN_PREFIX.test(s.identifier)) await Notifications.cancelScheduledNotificationAsync(s.identifier)
+}
+
 /** Shows a budget alert right away, at most once per (category, month, threshold). */
 export async function notifyBudgetOnce(key: string, title: string, body: string): Promise<void> {
   const storageKey = `hisab.budgetAlert.${key}`
+  if ((await getPermission()) !== 'granted') return
   if (await AsyncStorage.getItem(storageKey)) return
   await AsyncStorage.setItem(storageKey, '1')
-  if ((await getPermission()) !== 'granted') return
   await Notifications.scheduleNotificationAsync({
     content: { title, body, data: { link: '/plan' } },
     trigger: null,

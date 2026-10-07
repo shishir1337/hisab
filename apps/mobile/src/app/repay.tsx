@@ -1,5 +1,5 @@
-import { lendingStatus, parseAmount } from '@hisab/core'
-import { Q, recordRepayment, softDeleteTransaction, type LendingView } from '@hisab/db'
+import { formatMoney, keypadFromMinor, lendingStatus, parseAmount } from '@hisab/core'
+import { Q, QL, recordPersonRepayment, softDeleteTransaction, type LendingView } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
 import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
@@ -13,22 +13,24 @@ import { useProfile, useToday } from '@/lib/profile'
 import { useTheme } from '@/lib/theme'
 import { useToast } from '@/lib/undo'
 
-/** "Got paid" (lent) / "Paid back" (borrowed): full or partial repayment. */
+/**
+ * "Got paid" (lent) / "Paid back" (borrowed) for a person: the amount is spread across their open
+ * lendings oldest-first, so repaying a total never leaves a phantom balance (review M4 C1).
+ */
 export default function RepayScreen() {
-  const { lending: lendingId } = useLocalSearchParams<{ lending: string }>()
+  const { party: partyId, direction = 'lent' } = useLocalSearchParams<{ party: string; direction?: 'lent' | 'borrowed' }>()
   const db = usePowerSync()
   const { userId, currency, grouping, timeZone } = useProfile()
   const today = useToday(timeZone)
   const { colors } = useTheme()
   const toast = useToast()
-  const { data: rows } = useQuery<LendingView & { party_name: string }>(
-    `select l.*, p.name as party_name, coalesce((select sum(t.amount_minor) from transactions t where t.lending_id = l.id and t.deleted_at is null
-       and t.type = case l.direction when 'lent' then 'lending_in' else 'lending_out' end), 0) as repaid
-     from lendings l join parties p on p.id = l.party_id where l.id = ?`,
-    [lendingId],
-  )
+  const { data: partyRows } = useQuery<{ name: string }>(QL.partyById, [partyId])
+  const { data: lendings } = useQuery<LendingView>(QL.lendingsForParty, [partyId])
   const { data: accounts } = useQuery<{ id: string; name: string }>(Q.activeAccounts)
-  const lending = rows[0]
+  const name = partyRows[0]?.name ?? ''
+  const outstanding = lendings
+    .filter((l) => l.direction === direction && !l.closed_at)
+    .reduce((s, l) => s + lendingStatus(l, l.repaid, today).outstanding, 0)
 
   const [amount, setAmount] = useState('')
   const [accountId, setAccountId] = useState<string | null>(null)
@@ -36,29 +38,31 @@ export default function RepayScreen() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const loaded = useRef(false)
-  const outstanding = lending ? lendingStatus(lending, lending.repaid, today).outstanding : 0
 
   useEffect(() => {
-    if (!lending || loaded.current) return
+    if (loaded.current || outstanding <= 0) return
     loaded.current = true
-    setAmount(String(outstanding / 100))
-  }, [lending, outstanding])
+    setAmount(keypadFromMinor(outstanding))
+  }, [outstanding])
 
-  if (!lending) return <FormScreen title="Repayment">{null}</FormScreen>
-  const lent = lending.direction === 'lent'
+  const lent = direction === 'lent'
   const chosen = accountId ?? accounts[0]?.id ?? null
 
   const save = async () => {
     if (busy) return
     const parsed = parseAmount(amount)
     if (!parsed.ok) return setError('Enter the amount')
-    if (!chosen) return setError('Add an account first')
+    if (!chosen) return setError('Add an account first (Settings → Accounts)')
     setBusy(true)
     try {
-      const id = await recordRepayment(db, userId, lending.id, { amount_minor: parsed.minor, account_id: chosen, occurred_on: day })
+      const ids = await recordPersonRepayment(db, userId, partyId, direction, { amount_minor: parsed.minor, account_id: chosen, occurred_on: day })
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-      const settled = parsed.minor >= outstanding
-      toast({ message: settled ? `Settled with ${lending.party_name} 🎉` : 'Repayment recorded', onUndo: () => softDeleteTransaction(db, id) })
+      toast({
+        message: parsed.minor >= outstanding ? `Settled with ${name} 🎉` : `${formatMoney(parsed.minor, currency, { grouping }).text} recorded`,
+        onUndo: async () => {
+          for (const id of ids) await softDeleteTransaction(db, id)
+        },
+      })
       router.back()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Couldn’t save. Try again.')
@@ -67,9 +71,9 @@ export default function RepayScreen() {
   }
 
   return (
-    <FormScreen title={lent ? `Got paid by ${lending.party_name}` : `Paid back ${lending.party_name}`}>
+    <FormScreen title={lent ? `Got paid by ${name}` : `Paid back ${name}`}>
       <Text style={{ color: colors.textMuted, fontSize: 13.5, marginTop: 4 }}>
-        Outstanding: <Money minor={outstanding} currency={currency} grouping={grouping} size={13.5} weight="700" color={colors.text} />
+        {lent ? 'Owes you' : 'You owe'}: <Money minor={outstanding} currency={currency} grouping={grouping} size={13.5} weight="700" color={colors.text} />
       </Text>
 
       <Label hint="Less for a partial payment">Amount</Label>

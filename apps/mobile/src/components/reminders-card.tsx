@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Bell } from 'lucide-react-native'
 import { useEffect, useState } from 'react'
 import { AppState, Linking, Pressable, Text, View } from 'react-native'
@@ -5,11 +6,17 @@ import { getPermission, requestPermission, type PermissionState } from '@/lib/no
 import { useTheme } from '@/lib/theme'
 import { Button } from './button'
 
+const DISMISS_KEY = 'hisab.remindersCard.dismissed'
+
 /** Asks for notification permission at a moment that makes sense (not on first launch). */
 export function RemindersCard() {
   const { colors } = useTheme()
   const [state, setState] = useState<PermissionState | null>(null)
   const [dismissed, setDismissed] = useState(false)
+
+  useEffect(() => {
+    void AsyncStorage.getItem(DISMISS_KEY).then((v) => v && setDismissed(true))
+  }, [])
 
   useEffect(() => {
     const check = () => void getPermission().then(setState).catch(() => setState(null))
@@ -39,7 +46,14 @@ export function RemindersCard() {
           >
             {state === 'denied' ? 'Open settings' : 'Turn on'}
           </Button>
-          <Pressable accessibilityRole="button" hitSlop={10} onPress={() => setDismissed(true)}>
+          <Pressable
+            accessibilityRole="button"
+            hitSlop={10}
+            onPress={() => {
+              setDismissed(true)
+              void AsyncStorage.setItem(DISMISS_KEY, '1')
+            }}
+          >
             <Text style={{ color: colors.textMuted, fontSize: 13 }}>Not now</Text>
           </Pressable>
         </View>

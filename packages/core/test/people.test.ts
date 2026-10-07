@@ -38,6 +38,9 @@ describe('toE164', () => {
     ['12', null],
     ['hello', null],
     ['', null],
+    ['+880 01712345678', '+8801712345678'],
+    ['008801712345678', '+8801712345678'],
+    ['1712345678', '+8801712345678'],
   ])('%s → %s', (input, want) => expect(toE164(input)).toBe(want))
 })
 
@@ -97,14 +100,27 @@ describe('planNotifications', () => {
     expect(logged[0]!.fireAt.toISOString()).toBe('2026-10-08T15:00:00.000Z')
   })
 
-  it('caps at 64 keeping higher priority kinds first', () => {
+  it('caps each lending at 4 upcoming reminders and keeps the soonest items (nudge tomorrow survives)', () => {
     const out = plan({
       nudge: { enabled: true, time: '21:00' },
-      lendings: Array.from({ length: 10 }, (_, i) => ({ id: `x${i}`, partyId: `p${i}`, name: `P${i}`, direction: 'lent' as const, outstanding: 100, due_on: '2026-10-08' })),
+      reminderIntervalDays: 1,
+      lendings: Array.from({ length: 10 }, (_, i) => ({ id: `x${i}`, partyId: `p${i}`, name: `P${i}`, direction: 'lent' as const, outstanding: 100, due_on: '2026-10-01' })),
       loans: [{ id: 'l1', name: 'Loan', nextDueDate: '2026-10-10', emi_amount_minor: 100 }],
     })
-    expect(out.length).toBe(64)
+    expect(out.length).toBeLessThanOrEqual(64)
+    for (let i = 0; i < 10; i++) expect(out.filter((n) => n.id.startsWith(`lend:x${i}:`)).length).toBeLessThanOrEqual(4)
+    expect(out.some((n) => n.id === 'nudge:2026-10-08')).toBe(true)
     expect(out.filter((n) => n.kind === 'emi')).toHaveLength(2)
-    expect(out.some((n) => n.kind === 'nudge')).toBe(false)
+  })
+
+  it('when over the cap, the soonest notifications win', () => {
+    const out = plan({
+      nudge: { enabled: true, time: '21:00' },
+      lendings: Array.from({ length: 30 }, (_, i) => ({ id: `y${i}`, partyId: `p${i}`, name: `P${i}`, direction: 'lent' as const, outstanding: 100, due_on: '2026-10-08' })),
+    })
+    expect(out.length).toBe(64)
+    const latestKept = Math.max(...out.map((n) => n.fireAt.getTime()))
+    expect(out.some((n) => n.id === 'nudge:2026-10-07')).toBe(true)
+    expect(latestKept).toBeLessThan(new Date('2026-10-20T00:00:00Z').getTime())
   })
 })

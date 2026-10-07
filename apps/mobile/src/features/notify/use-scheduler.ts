@@ -3,7 +3,7 @@ import { groupOccurrences, QL, QP, type LoanWithPayments, type OpenLending, type
 import { useQuery } from '@powersync/react'
 import * as Notifications from 'expo-notifications'
 import { router } from 'expo-router'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { AppState } from 'react-native'
 import { reconcile, setupNotificationChannel } from '@/lib/notifications'
 import { usePrefs } from '@/lib/prefs'
@@ -21,7 +21,11 @@ export function useNotificationScheduler() {
   const { data: rules } = useQuery<RecurringRuleView>(QP.recurringRules)
   const { data: posted } = useQuery<{ rule_id: string; occurrence_date: string }>(QP.postedOccurrences)
   const { data: skipped } = useQuery<{ rule_id: string; occurrence_date: string }>(QP.skippedOccurrences)
-  const { data: todayCount } = useQuery<{ n: number }>('select count(*) as n from transactions where deleted_at is null and occurred_on = ?', [today])
+  // Only entries the user logged count (auto-posted salaries/rent don't silence the nudge).
+  const { data: todayCount, isLoading } = useQuery<{ n: number }>(
+    'select count(*) as n from transactions where deleted_at is null and occurred_on = ? and recurring_rule_id is null',
+    [today],
+  )
 
   const input = useMemo<PlanInput>(() => {
     const postedBy = groupOccurrences(posted)
@@ -58,29 +62,48 @@ export function useNotificationScheduler() {
     }
   }, [currency, grouping, loans, lendings, rules, posted, skipped, todayCount, prefs, today, timeZone])
 
-  // Debounced reconcile on any change.
+  // One reconcile at a time, always planned from the latest input (no stale run can undo a newer one).
+  const latest = useRef(input)
+  latest.current = input
+  const chain = useRef<Promise<void>>(Promise.resolve())
+  const run = useRef(() => {
+    chain.current = chain.current
+      .then(() => reconcile(planNotifications(latest.current, new Date(), timeZone)))
+      .catch(() => {})
+  })
+  run.current = () => {
+    chain.current = chain.current
+      .then(() => reconcile(planNotifications(latest.current, new Date(), timeZone)))
+      .catch(() => {})
+  }
+
   useEffect(() => {
-    if (!ready) return
-    const t = setTimeout(() => {
-      void reconcile(planNotifications(input, new Date(), timeZone)).catch(() => {})
-    }, 800)
+    void setupNotificationChannel()
+  }, [])
+
+  // Debounced re-plan on any change (after prefs and the local queries have loaded).
+  useEffect(() => {
+    if (!ready || isLoading) return
+    const t = setTimeout(() => run.current(), 800)
     return () => clearTimeout(t)
-  }, [input, ready, timeZone])
+  }, [input, ready, isLoading])
 
   // Re-plan when the app comes back (e.g. a day boundary passed in the background).
   useEffect(() => {
-    void setupNotificationChannel()
     const sub = AppState.addEventListener('change', (s) => {
-      if (s === 'active') void reconcile(planNotifications(input, new Date(), timeZone)).catch(() => {})
+      if (s === 'active') run.current()
     })
     return () => sub.remove()
-  }, [input, timeZone])
+  }, [])
 
   // Tapping a notification opens its screen.
   useEffect(() => {
     const open = (r: Notifications.NotificationResponse | null) => {
       const link = r?.notification.request.content.data?.link
-      if (typeof link === 'string') router.push(link as never)
+      if (typeof link !== 'string') return
+      router.push(link as never)
+      // Don't replay this tap on the next mount (e.g. after sign-out / sign-in).
+      void Notifications.clearLastNotificationResponseAsync?.()
     }
     void Notifications.getLastNotificationResponseAsync().then(open)
     const sub = Notifications.addNotificationResponseReceivedListener(open)

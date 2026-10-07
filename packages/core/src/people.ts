@@ -40,12 +40,19 @@ export function smsUrl(phoneE164: string, text: string): string {
 export function toE164(input: string): string | null {
   const raw = input.trim()
   if (!raw) return null
-  const plus = raw.startsWith('+')
-  const digits = raw.replace(/\D/g, '')
+  let digits = raw.replace(/\D/g, '')
+  let international = raw.startsWith('+')
+  if (!international && digits.startsWith('00')) {
+    international = true
+    digits = digits.slice(2)
+  }
+  // "+880 01712…": the trunk 0 after the country code must go.
+  if (digits.startsWith('8800')) digits = `880${digits.slice(4)}`
   let out: string | null = null
-  if (plus) out = `+${digits}`
+  if (international) out = `+${digits}`
   else if (digits.startsWith('880') && digits.length === 13) out = `+${digits}`
   else if (digits.startsWith('01') && digits.length === 11) out = `+880${digits.slice(1)}`
+  else if (digits.startsWith('1') && digits.length === 10) out = `+880${digits}`
   return out && /^\+[1-9]\d{7,14}$/.test(out) ? out : null
 }
 

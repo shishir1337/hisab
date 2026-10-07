@@ -97,3 +97,41 @@ describe('reminders and party history', () => {
     expect(await db.getOptional('select phone from parties where id = ?', [karim])).toEqual({ phone: '+8801812345678' })
   })
 })
+
+import { deleteLending, recordPersonRepayment, restoreLending, updateLending } from '../src/people-mutations'
+
+describe('m4 review fixes', () => {
+  it('a repayment spreads across the person’s open lendings, oldest first', async () => {
+    const a = await createLending(db, USER, { party_id: rafiq, direction: 'lent', principal_minor: 100000, started_on: '2026-09-01', account_id: cash })
+    const b = await createLending(db, USER, { party_id: rafiq, direction: 'lent', principal_minor: 50000, started_on: '2026-09-15', account_id: cash })
+    await recordPersonRepayment(db, USER, rafiq, 'lent', { amount_minor: 120000, account_id: cash, occurred_on: '2026-10-01' })
+    const ls = await db.getAll<LendingView>(QL.lendingsForParty, [rafiq])
+    expect(Object.fromEntries(ls.map((l) => [l.id, l.repaid]))).toEqual({ [a]: 100000, [b]: 20000 })
+    expect((await people())[0]).toMatchObject({ owed_to_me: 30000 })
+    expect(await cashBalance()).toBe(5000000 - 150000 + 120000)
+  })
+
+  it('over-payment lands on the newest lending (nothing lost) and everything settles', async () => {
+    await createLending(db, USER, { party_id: rafiq, direction: 'lent', principal_minor: 100, started_on: '2026-09-01', account_id: null })
+    await recordPersonRepayment(db, USER, rafiq, 'lent', { amount_minor: 150, account_id: cash, occurred_on: '2026-10-01' })
+    expect((await people())[0]).toMatchObject({ owed_to_me: 0 })
+    expect(await cashBalance()).toBe(5000000 + 150)
+  })
+
+  it('deleting a lending removes its money movements too; restore brings both back', async () => {
+    const id = await createLending(db, USER, { party_id: rafiq, direction: 'lent', principal_minor: 5000000, started_on: '2026-09-01', account_id: cash })
+    await recordPersonRepayment(db, USER, rafiq, 'lent', { amount_minor: 1000, account_id: cash, occurred_on: '2026-09-02' })
+    await deleteLending(db, id)
+    expect(await cashBalance()).toBe(5000000)
+    expect((await people())[0]).toMatchObject({ owed_to_me: 0 })
+    await restoreLending(db, id)
+    expect(await cashBalance()).toBe(5000000 - 5000000 + 1000)
+  })
+
+  it('editing a lending also corrects its initial movement', async () => {
+    const id = await createLending(db, USER, { party_id: rafiq, direction: 'lent', principal_minor: 5000000, started_on: '2026-09-01', account_id: cash })
+    await updateLending(db, id, { principal_minor: 500000, started_on: '2026-09-02', due_on: '2026-10-01' })
+    expect(await cashBalance()).toBe(5000000 - 500000)
+    expect((await db.getAll<LendingView>(QL.lendingsForParty, [rafiq]))[0]).toMatchObject({ principal_minor: 500000, started_on: '2026-09-02', due_on: '2026-10-01' })
+  })
+})

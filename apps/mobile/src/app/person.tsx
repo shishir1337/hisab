@@ -1,9 +1,9 @@
-import { formatMoney, lendingStatus, reminderMessage, smsUrl, toE164, whatsappUrl } from '@hisab/core'
-import { closeLending, logReminderSent, QL, restoreTransaction, softDeleteTransaction, updateParty, type LendingView } from '@hisab/db'
+import { formatMoney, isoInstant, lendingStatus, localDate, reminderMessage, smsUrl, toE164, whatsappUrl } from '@hisab/core'
+import { closeLending, deleteLending, logReminderSent, QL, restoreLending, restoreTransaction, softDeleteTransaction, updateParty, type LendingView } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
 import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
-import { ChevronLeft, MessageCircle, MessageSquareText, Plus, Trash2 } from 'lucide-react-native'
+import { ChevronLeft, MessageCircle, MessageSquareText, Pencil, Plus, Trash2 } from 'lucide-react-native'
 import { useEffect, useMemo, useState } from 'react'
 import { Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -49,6 +49,7 @@ export default function PersonScreen() {
   const [message, setMessage] = useState('')
   const [phoneDraft, setPhoneDraft] = useState('')
   const [phoneError, setPhoneError] = useState<string | null>(null)
+  const [editingPhone, setEditingPhone] = useState(false)
 
   useEffect(() => {
     if (!party || !focus || !direction) return
@@ -84,6 +85,7 @@ export default function PersonScreen() {
     await updateParty(db, party.id, { name: party.name, kind: party.kind, phone: e164, note: party.note })
     setPhoneDraft('')
     setPhoneError(null)
+    setEditingPhone(false)
   }
 
   return (
@@ -108,7 +110,9 @@ export default function PersonScreen() {
           <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 21, fontWeight: '700' }}>
             {party.name}
           </Text>
-          <Text style={{ color: colors.textFaint, fontSize: 12.5 }}>{party.phone ? maskPhone(party.phone) : 'No phone number'}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="Change phone number" onPress={() => setEditingPhone(true)} hitSlop={6}>
+            <Text style={{ color: colors.textFaint, fontSize: 12.5 }}>{party.phone ? `${maskPhone(party.phone)} · change` : 'No phone number'}</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -123,6 +127,13 @@ export default function PersonScreen() {
             weight="700"
             color={direction === 'lent' ? colors.positive : colors.text}
           />
+          {direction === 'lent' && iOwe > 0 && (
+            <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/repay', params: { party: party.id, direction: 'borrowed' } })}>
+              <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 2 }}>
+                You also owe {formatMoney(iOwe, currency, { grouping }).text} · <Text style={{ fontWeight: '600', color: colors.text }}>Paid back</Text>
+              </Text>
+            </Pressable>
+          )}
           {overdue?.l.due_on ? (
             <Text style={{ color: colors.warning, fontSize: 12.5, fontWeight: '600', marginTop: 2 }}>
               ● Was due {formatDay(overdue.l.due_on)} · {Math.round((Date.parse(today) - Date.parse(overdue.l.due_on)) / 86_400_000)} days overdue
@@ -142,11 +153,11 @@ export default function PersonScreen() {
               label={direction === 'lent' ? 'Got paid' : 'Paid back'}
               bg={colors.brand}
               fg={colors.brandFg}
-              onPress={() => focus && router.push({ pathname: '/repay', params: { lending: focus.l.id } })}
+              onPress={() => router.push({ pathname: '/repay', params: { party: party.id, direction } })}
             />
           </View>
 
-          {party.phone ? (
+          {party.phone && !editingPhone ? (
             <View className="mt-4 rounded-[14px] bg-surface-muted p-3">
               <Text style={{ color: colors.textFaint, fontSize: 11.5, marginBottom: 4 }}>Message (edit before sending)</Text>
               <TextInput
@@ -204,6 +215,21 @@ export default function PersonScreen() {
                     </Text>
                   </View>
                   <Money minor={l.principal_minor} currency={currency} grouping={grouping} hideCode size={14} weight="600" color={st.status === 'settled' ? colors.textFaint : colors.text} />
+                  <Pressable accessibilityRole="button" accessibilityLabel="Edit lending" hitSlop={8} onPress={() => router.push({ pathname: '/lend', params: { edit: l.id } })} className="ml-2 h-8 w-8 items-center justify-center">
+                    <Pencil size={14} color={colors.textFaint} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Delete lending"
+                    hitSlop={8}
+                    onPress={async () => {
+                      await deleteLending(db, l.id)
+                      toast({ message: 'Lending deleted', onUndo: () => restoreLending(db, l.id) })
+                    }}
+                    className="h-8 w-8 items-center justify-center"
+                  >
+                    <Trash2 size={14} color={colors.textFaint} />
+                  </Pressable>
                   {st.status !== 'settled' && (
                     <Pressable
                       accessibilityRole="button"
@@ -231,7 +257,7 @@ export default function PersonScreen() {
           <View className="rounded-card border border-border bg-surface px-3.5">
             {[
               ...history.map((h) => ({ kind: 'tx' as const, day: h.occurred_on, h })),
-              ...reminders.map((r) => ({ kind: 'reminder' as const, day: r.sent_at.slice(0, 10), r })),
+              ...reminders.map((r) => ({ kind: 'reminder' as const, day: localDate(new Date(isoInstant(r.sent_at)), timeZone), r })),
             ]
               .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0))
               .map((row, i) => (

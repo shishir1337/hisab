@@ -8,6 +8,7 @@ import { NumberStepper } from '@/components/form'
 import { Money } from '@/components/money'
 import { Segmented } from '@/components/segmented'
 import { ACCOUNT_TYPE_META } from '@/features/accounts/meta'
+import { cancelOwnNotifications } from '@/lib/notifications'
 import { usePrefs } from '@/lib/prefs'
 import { useProfile } from '@/lib/profile'
 import { useSession } from '@/lib/session'
@@ -110,7 +111,8 @@ export default function SettingsScreen() {
         <Pressable
           accessibilityRole="button"
           onPress={async () => {
-            // Local data stays on this device for this account (per-user database).
+            // Local data stays on this device for this account (per-user database); reminders don't.
+            await cancelOwnNotifications().catch(() => {})
             const { error } = await supabase.auth.signOut()
             if (error) await supabase.auth.signOut({ scope: 'local' })
           }}

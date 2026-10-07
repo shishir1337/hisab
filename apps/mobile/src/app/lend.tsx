@@ -1,9 +1,9 @@
 import { addDays, parseAmount, toE164 } from '@hisab/core'
-import { createLending, createParty, Q, QL, ValidationError, type PersonWithBalance } from '@hisab/db'
+import { createLending, createParty, Q, QL, updateLending, ValidationError, type LendingView, type PersonWithBalance } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
 import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ScrollView, Switch, Text, TextInput, View } from 'react-native'
 import { Button } from '@/components/button'
 import { Chip } from '@/components/chip'
@@ -17,7 +17,7 @@ const BEFORE_HISAB = '__before__'
 
 /** Record money lent to / borrowed from someone (spec §7.3 quick-log "Lend"). */
 export default function LendScreen() {
-  const params = useLocalSearchParams<{ party?: string }>()
+  const params = useLocalSearchParams<{ party?: string; edit?: string }>()
   const db = usePowerSync()
   const { userId, currency, timeZone } = useProfile()
   const today = useToday(timeZone)
@@ -37,6 +37,19 @@ export default function LendScreen() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const chosenAccount = accountId ?? accounts[0]?.id ?? BEFORE_HISAB
+  const { data: editing } = useQuery<LendingView>('select l.*, 0 as repaid from lendings l where l.id = ?', [params.edit ?? ''])
+  const existing = params.edit ? editing[0] : undefined
+  const loaded = useRef(false)
+  useEffect(() => {
+    if (!existing || loaded.current) return
+    loaded.current = true
+    setDirection(existing.direction)
+    setPartyId(existing.party_id)
+    setAmount(String(existing.principal_minor / 100))
+    setStartedOn(existing.started_on)
+    setHasDue(Boolean(existing.due_on))
+    if (existing.due_on) setDueOn(existing.due_on)
+  }, [existing])
   const persons = people.filter((p) => p.kind === 'person')
 
   const save = async () => {
@@ -51,7 +64,15 @@ export default function LendScreen() {
     }
     setBusy(true)
     try {
+      if (existing) {
+        await updateLending(db, existing.id, { principal_minor: parsed.minor, started_on: startedOn, due_on: hasDue ? dueOn : null, note: existing.note })
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+        router.back()
+        return
+      }
       const pid = partyId ?? (await createParty(db, userId, { name: newName.trim(), kind: 'person', phone }))
+      // Remember the new person so a retry after an error doesn't create a duplicate.
+      setPartyId(pid)
       await createLending(db, userId, {
         party_id: pid,
         direction,
@@ -63,13 +84,13 @@ export default function LendScreen() {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       router.replace({ pathname: '/person', params: { id: pid } })
     } catch (e) {
-      setError(e instanceof ValidationError ? e.issues[0]!.message : 'Couldn’t save. Try again.')
+      setError(e instanceof ValidationError ? e.issues[0]!.message : e instanceof Error ? e.message : 'Couldn’t save. Try again.')
       setBusy(false)
     }
   }
 
   return (
-    <FormScreen title={direction === 'lent' ? 'Lent money' : 'Borrowed money'}>
+    <FormScreen title={existing ? 'Edit lending' : direction === 'lent' ? 'Lent money' : 'Borrowed money'}>
       <View className="mt-2">
         <Segmented<Direction>
           value={direction}

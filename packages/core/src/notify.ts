@@ -38,6 +38,8 @@ const WINDOW_DAYS = 30
 const MAX_PENDING = 64
 const PRIORITY: NotificationKind[] = ['emi', 'lending', 'recurring', 'nudge']
 const MORNING = '10:00'
+/** Upcoming reminders kept per lending (re-planned on every change, so later ones appear in time). */
+const MAX_PER_LENDING = 4
 
 /** Minutes the zone is ahead of UTC at instant `at`. */
 function offsetMinutes(at: Date, timeZone: string): number {
@@ -104,8 +106,11 @@ export function planNotifications(input: PlanInput, now: Date, timeZone: string)
     const step = Math.max(1, l.intervalDays ?? input.reminderIntervalDays)
     const title = l.direction === 'lent' ? `${l.name} owes you ${money(l.outstanding)}` : `You owe ${l.name} ${money(l.outstanding)}`
     const body = l.direction === 'lent' ? 'Tap to send a friendly reminder.' : 'Tap to record a repayment.'
-    for (let day = l.due_on; day <= lastDay; day = addDays(day, step)) {
+    let kept = 0
+    for (let day = l.due_on; day <= lastDay && kept < MAX_PER_LENDING; day = addDays(day, step)) {
+      const before = out.length
       add({ id: `lend:${l.id}:${day}`, kind: 'lending', day, title, body, deepLink: `/person?id=${l.partyId}` })
+      if (out.length > before) kept++
     }
   }
 
@@ -121,6 +126,8 @@ export function planNotifications(input: PlanInput, now: Date, timeZone: string)
     }
   }
 
-  const byPriority = PRIORITY.flatMap((k) => out.filter((n) => n.kind === k).sort((a, b) => a.fireAt.getTime() - b.fireAt.getTime()))
-  return byPriority.slice(0, MAX_PENDING).sort((a, b) => a.fireAt.getTime() - b.fireAt.getTime())
+  // Soonest first (priority breaks ties), so far-off reminders never push out tomorrow's.
+  return out
+    .sort((a, b) => a.fireAt.getTime() - b.fireAt.getTime() || PRIORITY.indexOf(a.kind) - PRIORITY.indexOf(b.kind))
+    .slice(0, MAX_PENDING)
 }

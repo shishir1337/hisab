@@ -58,13 +58,14 @@ export const QL = {
   openLendings: `select l.id, l.party_id, l.direction, l.principal_minor, l.started_on, l.due_on,
       l.reminder_interval_days, l.note, l.closed_at, ${REPAID} as repaid, p.name as party_name, p.phone as party_phone
     from lendings l join parties p on p.id = l.party_id
-    where l.deleted_at is null and l.closed_at is null`,
+    where l.deleted_at is null and l.closed_at is null and p.deleted_at is null`,
 
   /** Totals → { owed_to_me, i_owe } */
   lendingTotals: `select
       coalesce(sum(case when l.direction = 'lent' then ${OUTSTANDING} end), 0) as owed_to_me,
       coalesce(sum(case when l.direction = 'borrowed' then ${OUTSTANDING} end), 0) as i_owe
-    from lendings l where l.deleted_at is null and l.closed_at is null`,
+    from lendings l join parties p on p.id = l.party_id
+    where l.deleted_at is null and l.closed_at is null and p.deleted_at is null`,
 
   /** params: [partyId] */
   remindersForParty: `select r.id, r.channel, r.sent_at, r.lending_id from lending_reminders_sent r
