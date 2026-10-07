@@ -1,0 +1,82 @@
+@import 'tailwindcss';
+
+/* Theme values come from @hisab/tokens via <ThemeTokens /> (CSS variables on :root and .dark). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-text: var(--text);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+  --color-brand: var(--brand);
+  --color-brand-fg: var(--brand-fg);
+  --color-positive: var(--positive);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-hero-from: var(--hero-from);
+  --color-hero-to: var(--hero-to);
+  --color-hero-border: var(--hero-border);
+  --color-hero-text: var(--hero-text);
+  --color-overlay: var(--overlay);
+
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --radius-tile: 11px;
+  --radius-chip: 12px;
+  --radius-card: 18px;
+  --radius-hero: 24px;
+  --radius-sheet: 26px;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    font-feature-settings: 'cv11', 'ss01', 'ss03';
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--brand) 18%, transparent);
+  }
+}
+
+@layer components {
+  /* Numbers: tabular figures, slightly tight. */
+  .num {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.025em;
+  }
+  /* ISO currency code rendered before amounts (spec §7.1). */
+  .currency-code {
+    font-size: 0.62em;
+    font-weight: 500;
+    opacity: 0.45;
+    letter-spacing: 0.02em;
+    margin-right: 0.28em;
+  }
+  .hero-card {
+    background: radial-gradient(120% 140% at 0% 0%, var(--hero-from) 0%, var(--hero-to) 62%);
+    color: var(--hero-text);
+    border: 1px solid var(--hero-border);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
