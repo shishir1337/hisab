@@ -23,7 +23,7 @@ export function ThemeToggle() {
       onClick={() => setTheme(next)}
       aria-label={`${LABEL[current]}. Switch to ${next}.`}
       title={LABEL[current]}
-      className="grid size-9 place-items-center rounded-[10px] text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
+      className="grid size-11 place-items-center rounded-[10px] text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
     >
       <Icon className="size-[18px]" />
     </button>

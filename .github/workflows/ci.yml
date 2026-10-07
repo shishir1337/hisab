@@ -18,7 +18,7 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci
-      - run: npx expo export --platform android --output-dir /tmp/expo-android
+      - run: npx expo export --platform android --output-dir /tmp/expo-android  # Android + web only (no iOS)
         working-directory: apps/mobile
         env:
           EXPO_PUBLIC_SUPABASE_URL: https://example.supabase.co

@@ -60,7 +60,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <ThemeToggle />
             <button
               onClick={signOut}
-              className="inline-flex h-9 items-center gap-2 rounded-[10px] px-2.5 text-[13px] text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
+              className="inline-flex h-11 items-center gap-2 rounded-[10px] px-2.5 text-[13px] text-text-muted transition-colors hover:bg-surface-muted hover:text-text"
             >
               <LogOut className="size-4" /> Sign out
             </button>

@@ -53,9 +53,10 @@ export function formatMoney(
   opts: FormatMoneyOptions = {},
 ): FormattedMoney {
   const { grouping = 'south_asian', showDecimals = 'auto', sign = 'auto' } = opts
-  const negative = minor < 0
   let abs = Math.abs(Math.trunc(minor))
   if (showDecimals === 'never') abs = Math.round(abs / 100) * 100
+  // Computed after rounding so tiny negatives never render as "−0".
+  const negative = minor < 0 && abs !== 0
   const whole = Math.floor(abs / 100)
   const frac = abs % 100
   let number = groupDigits(String(whole), grouping)
@@ -70,14 +71,11 @@ export function formatMoney(
   return { code, number, text: `${code} ${number}` }
 }
 
-function trimDecimal(n: number): string {
-  const s = (Math.floor(n * 10) / 10).toFixed(1)
-  return s.endsWith('.0') ? s.slice(0, -2) : s
-}
+const round1 = (n: number) => Math.round(n * 10) / 10
+const oneDecimal = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
-/** Compact form for tiles: 4.2L, 1.2Cr (south_asian) or 420K, 1.2M (western). */
+/** Compact form for tiles: 4.2L, 1.2Cr (south_asian) or 420K, 1.2M (western). Rounds to 1 decimal. */
 export function formatCompact(minor: number, grouping: Grouping): string {
-  const negative = minor < 0
   const units = Math.abs(minor) / 100
   const steps: Array<[number, string]> =
     grouping === 'south_asian'
@@ -91,14 +89,15 @@ export function formatCompact(minor: number, grouping: Grouping): string {
           [1e3, 'K'],
         ]
   let out: string | undefined
-  for (const [size, suffix] of steps) {
-    if (units >= size) {
-      out = trimDecimal(units / size) + suffix
-      break
-    }
+  const i = steps.findIndex(([size]) => units >= size)
+  if (i !== -1) {
+    // Promote when rounding reaches the next unit: 9,99,99,999 → "1Cr", not "100L"; 999,999.5 → "1M".
+    const bigger = steps[i - 1]
+    const [size, suffix] = bigger && round1(units / bigger[0]) >= 1 ? bigger : steps[i]!
+    out = oneDecimal(round1(units / size)) + suffix
   }
   out ??= groupDigits(String(Math.round(units)), grouping)
-  return negative ? MINUS + out : out
+  return minor < 0 && out !== '0' ? MINUS + out : out
 }
 
 /** originalMinor × rate, rounded half-to-even, using exact decimal math. */
@@ -112,5 +111,6 @@ export function convertFx(originalMinor: number, rate: string): number {
   const r = product % scale
   const twice = r * 2n
   if (twice > scale || (twice === scale && q % 2n === 1n)) q += 1n
+  if (q > BigInt(Number.MAX_SAFE_INTEGER)) throw new Error('Converted amount is too large')
   return Number(q)
 }

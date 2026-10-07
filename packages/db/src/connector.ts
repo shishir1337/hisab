@@ -12,9 +12,18 @@ import { BOOLEAN_COLUMNS } from './schema'
  * insufficient privilege (42501) and our own raised exceptions (P0001). Anything else (network,
  * 5xx, PostgREST transport) is transient and must be retried by PowerSync.
  */
-export function isPermanentError(code: string | undefined): boolean {
+export function isPermanentError(code: string | undefined, message = ''): boolean {
   if (!code) return false
-  return /^22...$/.test(code) || /^23...$/.test(code) || code === '42501' || code === 'P0001'
+  // 42501 covers both a genuine RLS rejection and "permission denied for table" (request sent without a
+  // user session, e.g. mid token refresh). Only the former can never succeed.
+  if (code === '42501') return message === '' || /row-level security/i.test(message)
+  return /^22...$/.test(code) || /^23...$/.test(code) || code === 'P0001'
+}
+
+/** Unique indexes that de-duplicate the same post from two devices: the row already exists server-side. */
+const DEDUPE_INDEXES = ['tx_recurring_once', 'tx_installment_once']
+function isAlreadyPosted(error: { code?: string; message: string }): boolean {
+  return error.code === '23505' && DEDUPE_INDEXES.some((i) => error.message.includes(i))
 }
 
 function toServerRow(table: string, data: Record<string, unknown>): Record<string, unknown> {
@@ -59,6 +68,12 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
     const tx = await database.getNextCrudTransaction()
     if (!tx) return
 
+    // Without a user session every request would go out as `anon` and be rejected; retry later instead.
+    const {
+      data: { session },
+    } = await this.supabase.auth.getSession()
+    if (!session) throw new Error('No Supabase session; upload will retry after sign-in')
+
     for (const op of tx.crud) {
       const table = this.supabase.from(op.table)
       const data = toServerRow(op.table, op.opData ?? {})
@@ -75,7 +90,8 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
           break
       }
       if (result.error) {
-        if (!isPermanentError(result.error.code)) throw result.error
+        if (isAlreadyPosted(result.error)) continue
+        if (!isPermanentError(result.error.code, result.error.message)) throw result.error
         // Never block the queue on a row the server will always reject: park it for the user.
         await database.execute(
           'insert into upload_issues (id, table_name, row_id, op, code, message, payload, created_at) values (uuid(), ?, ?, ?, ?, ?, ?, ?)',

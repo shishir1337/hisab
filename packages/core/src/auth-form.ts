@@ -18,6 +18,8 @@ export type AuthFormAction =
   | { type: 'verified' }
   | { type: 'verifyFailed'; error: string }
   | { type: 'back' }
+  /** Re-send the code without leaving the code step. */
+  | { type: 'resend' }
 
 export const OTP_LENGTH = 6
 
@@ -44,7 +46,11 @@ export function authFormReducer(state: AuthFormState, action: AuthFormAction): A
     case 'sent':
       return { ...state, step: 'code', status: 'idle', code: '', error: null }
     case 'sendFailed':
-      return { ...state, step: 'email', status: 'idle', error: action.error }
+      // Stay where the user is: a failed resend must not bounce them back to the email step.
+      return { ...state, status: 'idle', error: action.error }
+    case 'resend':
+      if (state.status !== 'idle' || state.step !== 'code') return state
+      return { ...state, status: 'sending', code: '', error: null }
     case 'setCode':
       return { ...state, code: action.code.replace(/\D/g, '').slice(0, OTP_LENGTH), error: null }
     case 'submitCode':

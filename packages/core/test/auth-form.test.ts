@@ -82,3 +82,18 @@ describe('authFormReducer', () => {
     expect(authFormReducer(s, { type: 'submitEmail' })).toBe(s)
   })
 })
+
+describe('resend', () => {
+  const onCode = () =>
+    [{ type: 'setEmail', email: 'me@x.dev' }, { type: 'submitEmail' }, { type: 'sent' }] as Parameters<typeof authFormReducer>[1][]
+  it('stays on the code step while resending', () =>
+    expect(run(...onCode(), { type: 'resend' })).toMatchObject({ step: 'code', status: 'sending', email: 'me@x.dev' }))
+  it('a failed resend keeps the user on the code step with the error', () =>
+    expect(run(...onCode(), { type: 'resend' }, { type: 'sendFailed', error: 'Too many attempts' })).toMatchObject({
+      step: 'code',
+      status: 'idle',
+      error: 'Too many attempts',
+    }))
+  it('a successful resend stays on the code step', () =>
+    expect(run(...onCode(), { type: 'resend' }, { type: 'sent' })).toMatchObject({ step: 'code', status: 'idle' }))
+})

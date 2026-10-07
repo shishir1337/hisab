@@ -59,3 +59,16 @@ describe('convertFx', () => {
   it('many decimals', () => expect(convertFx(10000, '121.4567')).toBe(1214567))
   it('rejects bad rate', () => expect(() => convertFx(100, 'abc')).toThrow())
 })
+
+describe('review fixes', () => {
+  it('never shows a negative zero', () =>
+    expect(formatMoney(-49, 'BDT', { showDecimals: 'never' }).text).toBe('BDT 0'))
+  it('compact rounds instead of truncating', () => {
+    expect(formatCompact(199999999, 'south_asian')).toBe('20L')
+    expect(formatCompact(1999999999, 'south_asian')).toBe('2Cr')
+    expect(formatCompact(19400000, 'south_asian')).toBe('1.9L')
+    expect(formatCompact(99999950, 'western')).toBe('1M')
+  })
+  it('convertFx rejects results beyond safe integers', () =>
+    expect(() => convertFx(Number.MAX_SAFE_INTEGER, '2')).toThrow())
+})

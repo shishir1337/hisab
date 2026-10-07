@@ -1,6 +1,6 @@
 'use client'
 
-import { authFormReducer, initialAuthForm, OTP_LENGTH } from '@hisab/core'
+import { authFormReducer, initialAuthForm, OTP_LENGTH, safeNextPath } from '@hisab/core'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useReducer, useRef, useState } from 'react'
@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input'
 import { getSupabase } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
-const RESEND_SECONDS = 30
+/** Supabase's hosted default allows one code email per address per 60 s. */
+const RESEND_SECONDS = 60
 
 export function SignInForm() {
   const [state, dispatch] = useReducer(authFormReducer, initialAuthForm)
@@ -43,11 +44,15 @@ export function SignInForm() {
 
   useEffect(() => {
     if (state.step === 'done') {
-      router.replace(next?.startsWith('/') ? next : '/')
+      router.replace(safeNextPath(next))
       router.refresh()
     }
-    if (state.step === 'code') codeRef.current?.focus()
   }, [state.step, next, router])
+
+  // Inputs are disabled while a request is in flight; give focus back when it finishes.
+  useEffect(() => {
+    if (state.step === 'code' && state.status === 'idle') codeRef.current?.focus()
+  }, [state.step, state.status])
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -83,6 +88,7 @@ export function SignInForm() {
           autoFocus
           placeholder="you@example.com"
           value={state.email}
+          disabled={state.status !== 'idle'}
           aria-invalid={Boolean(state.error)}
           aria-describedby={state.error ? 'email-error' : undefined}
           onChange={(e) => dispatch({ type: 'setEmail', email: e.target.value })}
@@ -124,6 +130,7 @@ export function SignInForm() {
           aria-label="6-digit code"
           aria-invalid={Boolean(state.error)}
           value={state.code}
+          disabled={state.status !== 'idle'}
           maxLength={OTP_LENGTH}
           onChange={(e) => dispatch({ type: 'setCode', code: e.target.value })}
           className="absolute inset-0 z-10 h-full w-full cursor-text opacity-0"
@@ -158,10 +165,7 @@ export function SignInForm() {
           <button
             type="button"
             className="font-medium text-text hover:underline"
-            onClick={() => {
-              dispatch({ type: 'back' })
-              dispatch({ type: 'submitEmail' })
-            }}
+            onClick={() => dispatch({ type: 'resend' })}
           >
             Resend code
           </button>

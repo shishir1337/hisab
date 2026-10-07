@@ -88,3 +88,9 @@ describe('partyInput', () => {
   it('rejects local phone format', () =>
     expect(paths(partyInput.safeParse({ name: 'Rafiq', phone: '01712345621' }))).toContain('phone'))
 })
+
+describe('review fixes', () => {
+  it.each(['2026-02-30', '2026-13-01', '2026-00-10', '2025-02-29'])('rejects impossible date %s', (d) =>
+    expect(paths(tx({ type: 'expense', category_id: C, occurred_on: d }))).toContain('occurred_on'))
+  it('accepts a leap day', () => expect(tx({ type: 'expense', category_id: C, occurred_on: '2028-02-29' }).success).toBe(true))
+})

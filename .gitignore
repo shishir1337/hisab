@@ -9,4 +9,4 @@ dist/
 *.tsbuildinfo
 supabase/.temp/
 supabase/.branches/
-public/@powersync/
+apps/web/public/@powersync/

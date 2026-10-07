@@ -5,7 +5,7 @@ import { SupabaseConnector, isPermanentError } from '../src/connector'
 type Op = { op: UpdateType; table: string; id: string; opData?: Record<string, unknown> }
 type Err = { code: string; message: string } | null
 
-function fakeSupabase(errorFor?: (table: string, kind: string) => Err) {
+function fakeSupabase(errorFor?: (table: string, kind: string) => Err, opts: { session?: boolean } = {}) {
   const calls: Array<{ table: string; kind: string; payload?: unknown; id?: string }> = []
   const from = (table: string) => {
     const result = (kind: string, payload?: unknown, id?: string) => {
@@ -19,7 +19,9 @@ function fakeSupabase(errorFor?: (table: string, kind: string) => Err) {
     }
   }
   const auth = {
-    getSession: async () => ({ data: { session: { access_token: 'tok', expires_at: 2000000000 } } }),
+    getSession: async () => ({
+      data: { session: opts.session === false ? null : { access_token: 'tok', expires_at: 2000000000 } },
+    }),
   }
   return { client: { from, auth } as never, calls }
 }
@@ -121,4 +123,41 @@ describe('isPermanentError', () => {
     ['08006', false],
     [undefined, false],
   ])('%s → %s', (code, want) => expect(isPermanentError(code)).toBe(want))
+})
+
+describe('review fixes', () => {
+  it('throws (retry later) instead of parking when there is no session', async () => {
+    const sb = fakeSupabase(() => ({ code: '42501', message: 'permission denied for table accounts' }), { session: false })
+    const { db, complete, execute } = fakeDb([{ op: UpdateType.PUT, table: 'accounts', id: 'a1', opData: {} }])
+    await expect(new SupabaseConnector(sb.client, {}).uploadData(db)).rejects.toThrow(/session/i)
+    expect(sb.calls).toEqual([])
+    expect(execute).not.toHaveBeenCalled()
+    expect(complete).not.toHaveBeenCalled()
+  })
+
+  it('"permission denied for table" is transient (request went out without a user)', async () => {
+    const sb = fakeSupabase(() => ({ code: '42501', message: 'permission denied for table accounts' }))
+    const { db, complete } = fakeDb([{ op: UpdateType.PUT, table: 'accounts', id: 'a1', opData: {} }])
+    await expect(new SupabaseConnector(sb.client, {}).uploadData(db)).rejects.toBeTruthy()
+    expect(complete).not.toHaveBeenCalled()
+  })
+
+  it('an RLS check violation is permanent (parked)', async () => {
+    const sb = fakeSupabase(() => ({ code: '42501', message: 'new row violates row-level security policy for table "accounts"' }))
+    const { db, complete, execute } = fakeDb([{ op: UpdateType.PUT, table: 'accounts', id: 'a1', opData: {} }])
+    await new SupabaseConnector(sb.client, {}).uploadData(db)
+    expect(execute).toHaveBeenCalledOnce()
+    expect(complete).toHaveBeenCalledOnce()
+  })
+
+  it.each(['tx_recurring_once', 'tx_installment_once'])(
+    'a duplicate post rejected by %s is treated as already done (not an issue)',
+    async (index) => {
+      const sb = fakeSupabase(() => ({ code: '23505', message: `duplicate key value violates unique constraint "${index}"` }))
+      const { db, complete, execute } = fakeDb([{ op: UpdateType.PUT, table: 'transactions', id: 't1', opData: {} }])
+      await new SupabaseConnector(sb.client, {}).uploadData(db)
+      expect(execute).not.toHaveBeenCalled()
+      expect(complete).toHaveBeenCalledOnce()
+    },
+  )
 })

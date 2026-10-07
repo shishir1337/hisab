@@ -30,7 +30,7 @@ export default function RootLayout() {
 }
 
 function RootStack() {
-  const { session, ready } = useSession()
+  const { user, ready } = useSession()
   const { scheme, colors } = useTheme()
 
   useEffect(() => {
@@ -42,10 +42,10 @@ function RootStack() {
     <>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.page } }}>
-        <Stack.Protected guard={Boolean(session)}>
+        <Stack.Protected guard={Boolean(user)}>
           <Stack.Screen name="(tabs)" />
         </Stack.Protected>
-        <Stack.Protected guard={!session}>
+        <Stack.Protected guard={!user}>
           <Stack.Screen name="sign-in" />
         </Stack.Protected>
       </Stack>

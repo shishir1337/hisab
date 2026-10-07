@@ -7,7 +7,8 @@ import { Button } from '@/components/button'
 import { supabase } from '@/lib/supabase'
 import { useTheme } from '@/lib/theme'
 
-const RESEND_SECONDS = 30
+/** Supabase's hosted default allows one code email per address per 60 s. */
+const RESEND_SECONDS = 60
 
 export default function SignInScreen() {
   const [state, dispatch] = useReducer(authFormReducer, initialAuthForm)
@@ -33,6 +34,11 @@ export default function SignInScreen() {
       })
     }
   }, [state.status, state.email, state.code])
+
+  // Inputs are disabled while a request is in flight; give focus back when it finishes.
+  useEffect(() => {
+    if (state.step === 'code' && state.status === 'idle') codeRef.current?.focus()
+  }, [state.step, state.status])
 
   useEffect(() => {
     if (cooldown <= 0) return
@@ -73,6 +79,7 @@ export default function SignInScreen() {
                 placeholder="you@example.com"
                 placeholderTextColor={colors.textFaint}
                 value={state.email}
+                editable={state.status === 'idle'}
                 onChangeText={(email) => dispatch({ type: 'setEmail', email })}
                 onSubmitEditing={() => dispatch({ type: 'submitEmail' })}
                 returnKeyType="go"
@@ -116,6 +123,7 @@ export default function SignInScreen() {
                   autoComplete="one-time-code"
                   maxLength={OTP_LENGTH}
                   value={state.code}
+                  editable={state.status === 'idle'}
                   onChangeText={(code) => dispatch({ type: 'setCode', code })}
                   style={{ position: 'absolute', opacity: 0, width: 1, height: 1 }}
                 />
@@ -152,10 +160,7 @@ export default function SignInScreen() {
                 ) : (
                   <Pressable
                     accessibilityRole="button"
-                    onPress={() => {
-                      dispatch({ type: 'back' })
-                      dispatch({ type: 'submitEmail' })
-                    }}
+                    onPress={() => dispatch({ type: 'resend' })}
                   >
                     <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Resend code</Text>
                   </Pressable>

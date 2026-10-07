@@ -4,7 +4,13 @@ import { z } from 'zod'
 // inline in the UI before it ever reaches the local database or the upload queue.
 
 const id = z.uuid()
-const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
+  .refine((d) => {
+    const parsed = new Date(`${d}T00:00:00Z`)
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === d
+  }, 'Not a real date')
 const amount = z.number().int('Must be a whole number of minor units').positive('Must be greater than 0')
 const currencyCode = z.string().regex(/^[A-Z]{3}$/, 'Expected a 3-letter currency code')
 const fxRate = z.string().regex(/^\d{1,12}(\.\d{1,8})?$/, 'Expected a decimal rate like 121.4')
