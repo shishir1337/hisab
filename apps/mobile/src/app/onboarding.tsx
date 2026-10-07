@@ -1,5 +1,6 @@
 import { parseAmount } from '@hisab/core'
-import { createAccount, Q, saveProfile, type AccountWithBalance } from '@hisab/db'
+import { createAccount, Q, saveProfile, seedDemoData, type AccountWithBalance } from '@hisab/db'
+import { localDate } from '@hisab/core'
 import { usePowerSync, useQuery } from '@powersync/react'
 import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
@@ -129,6 +130,20 @@ export default function OnboardingScreen() {
             <View className="mt-10">
               <Button onPress={() => setStep('currency')}>Get started</Button>
             </View>
+            {__DEV__ && (
+              <View className="mt-2">
+                <Button
+                  variant="ghost"
+                  onPress={async () => {
+                    await seedDemoData(db, userId, localDate(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'))
+                    await save({ onboarded_at: new Date().toISOString() })
+                    router.replace('/')
+                  }}
+                >
+                  Load demo data (dev)
+                </Button>
+              </View>
+            )}
           </View>
         )}
 
