@@ -1,7 +1,7 @@
 'use client'
 
 import { authFormReducer, initialAuthForm, OTP_LENGTH, safeNextPath } from '@hisab/core'
-import { ArrowLeft, Loader2 } from 'lucide-react'
+import { ArrowLeft, Loader2, Mail } from 'lucide-react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -81,9 +81,9 @@ export function SignInForm() {
           dispatch({ type: 'submitEmail' })
         }}
       >
-        <h1 className="text-[26px] font-semibold tracking-tight">Welcome</h1>
-        <p className="mt-1.5 text-[15px] text-text-muted">Sign in or create an account with your email.</p>
-        <label htmlFor="email" className="mt-8 mb-2 block text-[13px] font-medium text-text-muted">
+        <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Sign in to Hisab</h1>
+        <p className="mt-1 text-[14px] text-text-muted">New here? The same step creates your account.</p>
+        <label htmlFor="email" className="mt-6 mb-1.5 block text-[12.5px] font-medium text-text-muted">
           Email
         </label>
         <Input
@@ -99,10 +99,12 @@ export function SignInForm() {
           onChange={(e) => dispatch({ type: 'setEmail', email: e.target.value })}
         />
         <FieldError id="email-error" message={state.error ?? (linkFailed ? 'That sign-in link expired or was already used. Send a new one.' : null)} />
-        <Button type="submit" size="lg" className="mt-6 w-full" disabled={state.status !== 'idle'}>
-          {state.status === 'sending' ? <Loader2 className="animate-spin" /> : 'Continue'}
+        <Button type="submit" size="lg" className="mt-2 w-full" disabled={state.status !== 'idle'}>
+          {state.status === 'sending' ? <Loader2 className="animate-spin" /> : 'Continue with email'}
         </Button>
-        <p className="mt-6 text-center text-[12.5px] text-text-faint">We&rsquo;ll email you a 6-digit code. No password needed.</p>
+        <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-[12.5px] text-text-faint">
+          <Mail className="size-3.5" aria-hidden /> We&rsquo;ll email you a 6-digit code. No password.
+        </p>
       </form>
     )
   }
@@ -118,17 +120,17 @@ export function SignInForm() {
       <button
         type="button"
         onClick={() => dispatch({ type: 'back' })}
-        className="-ml-1 mb-6 inline-flex items-center gap-1.5 text-[13px] text-text-muted hover:text-text"
+        className="-ml-1 mb-5 inline-flex items-center gap-1.5 rounded-[6px] text-[13px] text-text-muted transition-colors hover:text-text"
       >
         <ArrowLeft className="size-4" /> Use a different email
       </button>
-      <h1 className="text-[26px] font-semibold tracking-tight">Check your email</h1>
-      <p className="mt-1.5 text-[15px] text-text-muted">
+      <h1 className="text-[22px] font-semibold tracking-[-0.02em]">Check your email</h1>
+      <p className="mt-1 text-[14px] leading-[21px] text-text-muted">
         Enter the code we sent to <span className="font-medium text-text">{state.email}</span>, or open the link in that
         email on this device.
       </p>
 
-      <div className="relative mt-8" onClick={() => codeRef.current?.focus()}>
+      <div className="relative mt-6" onClick={() => codeRef.current?.focus()}>
         <input
           ref={codeRef}
           inputMode="numeric"
@@ -149,7 +151,7 @@ export function SignInForm() {
               <div
                 key={i}
                 className={cn(
-                  'num grid h-14 place-items-center rounded-[14px] border bg-surface text-[22px] font-semibold transition-[border,box-shadow] duration-150',
+                  'num grid h-13 place-items-center rounded-[12px] border bg-surface text-[22px] font-semibold transition-[border-color,box-shadow] duration-150',
                   state.error ? 'border-danger' : active ? 'border-text-faint ring-4 ring-brand/[0.06]' : 'border-border',
                 )}
               >
@@ -161,10 +163,10 @@ export function SignInForm() {
       </div>
       <FieldError id="code-error" message={state.error} />
 
-      <Button type="submit" size="lg" className="mt-6 w-full" disabled={state.status !== 'idle'}>
+      <Button type="submit" size="lg" className="mt-2 w-full" disabled={state.status !== 'idle'}>
         {state.status === 'verifying' ? <Loader2 className="animate-spin" /> : 'Verify'}
       </Button>
-      <div className="mt-5 text-center text-[13px] text-text-muted">
+      <div className="mt-4 text-center text-[13px] text-text-muted">
         {cooldown > 0 ? (
           <span className="num">Resend code in {cooldown}s</span>
         ) : (

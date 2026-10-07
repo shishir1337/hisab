@@ -1,12 +1,14 @@
 'use client'
 
 import { Command } from 'cmdk'
-import { ArrowLeftRight, BarChart3, Home, ListOrdered, Minus, Moon, Plus, Settings, Target, Users } from 'lucide-react'
+import { ArrowLeftRight, BarChart3, Eye, EyeOff, Home, ListOrdered, Minus, Moon, Plus, Search, Settings, Sun, Target, Users } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { useEffect, useState, type ReactNode } from 'react'
 import { useQuickLog } from '@/components/quick-log/quick-log'
+import { Kbd } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { usePrivacy } from '@/lib/privacy'
 
 function isTyping(e: KeyboardEvent): boolean {
   const el = e.target as HTMLElement | null
@@ -19,6 +21,7 @@ export function CommandBar() {
   const router = useRouter()
   const quickLog = useQuickLog()
   const { resolvedTheme, setTheme } = useTheme()
+  const { hidden, toggle } = usePrivacy()
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -45,22 +48,28 @@ export function CommandBar() {
     setTimeout(fn, 0)
   }
 
+  const mod = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {open && (
-        <DialogContent title="Command" hideClose className="max-w-[560px] p-0 pt-0 [&>div:first-child]:sr-only">
-          <Command label="Command bar" className="overflow-hidden rounded-sheet">
-            <Command.Input autoFocus placeholder="Type a command…" className="h-14 w-full border-b border-border bg-transparent px-5 text-[15px] outline-none placeholder:text-text-faint" />
-            <Command.List className="max-h-[360px] overflow-y-auto p-2">
-              <Command.Empty className="px-3 py-6 text-center text-[13px] text-text-muted">No results.</Command.Empty>
+        <DialogContent title="Command" hideClose hideHeader className="max-w-[560px] overflow-hidden p-0 md:p-0">
+          <Command label="Command bar" loop className="flex flex-col">
+            <div className="flex items-center gap-3 border-b border-border px-5">
+              <Search className="size-[18px] shrink-0 text-text-faint" aria-hidden />
+              <Command.Input autoFocus placeholder="Type a command…" className="h-14 w-full bg-transparent text-[15px] outline-none placeholder:text-text-faint" />
+              <Kbd>esc</Kbd>
+            </div>
+            <Command.List className="max-h-[min(380px,60vh)] scroll-py-2 overflow-y-auto p-2">
+              <Command.Empty className="px-3 py-10 text-center text-[13px] text-text-muted">No matching commands.</Command.Empty>
               <Group heading="Log">
-                <Item icon={<Minus />} onSelect={run(() => quickLog.open({ type: 'expense' }))} shortcut="N">
+                <Item icon={<Minus />} onSelect={run(() => quickLog.open({ type: 'expense' }))} shortcut="N" keywords={['spend', 'add', 'expense']}>
                   New expense
                 </Item>
-                <Item icon={<Plus />} onSelect={run(() => quickLog.open({ type: 'income' }))}>
+                <Item icon={<Plus />} onSelect={run(() => quickLog.open({ type: 'income' }))} keywords={['salary', 'add']}>
                   New income
                 </Item>
-                <Item icon={<ArrowLeftRight />} onSelect={run(() => quickLog.open({ type: 'transfer' }))}>
+                <Item icon={<ArrowLeftRight />} onSelect={run(() => quickLog.open({ type: 'transfer' }))} keywords={['move']}>
                   New transfer
                 </Item>
               </Group>
@@ -68,28 +77,44 @@ export function CommandBar() {
                 <Item icon={<Home />} onSelect={run(() => router.push('/'))}>
                   Home
                 </Item>
-                <Item icon={<ListOrdered />} onSelect={run(() => router.push('/activity'))}>
+                <Item icon={<ListOrdered />} onSelect={run(() => router.push('/activity'))} keywords={['transactions', 'history']}>
                   Activity
                 </Item>
-                <Item icon={<Target />} onSelect={run(() => router.push('/plan'))}>
+                <Item icon={<Target />} onSelect={run(() => router.push('/plan'))} keywords={['budgets', 'recurring', 'loans', 'emi']}>
                   Plan
                 </Item>
-                <Item icon={<Users />} onSelect={run(() => router.push('/people'))}>
+                <Item icon={<Users />} onSelect={run(() => router.push('/people'))} keywords={['lending', 'borrow']}>
                   People
                 </Item>
-                <Item icon={<BarChart3 />} onSelect={run(() => router.push('/reports'))}>
+                <Item icon={<BarChart3 />} onSelect={run(() => router.push('/reports'))} keywords={['reports', 'pdf', 'csv']}>
                   Monthly report
                 </Item>
-                <Item icon={<Settings />} onSelect={run(() => router.push('/settings'))}>
+                <Item icon={<Settings />} onSelect={run(() => router.push('/settings'))} keywords={['accounts', 'currency', 'export']}>
                   Settings
                 </Item>
               </Group>
               <Group heading="Preferences">
-                <Item icon={<Moon />} onSelect={run(() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark'))}>
-                  Toggle dark mode
+                <Item icon={resolvedTheme === 'dark' ? <Sun /> : <Moon />} onSelect={run(() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark'))} keywords={['theme', 'dark', 'light']}>
+                  {resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                </Item>
+                <Item icon={hidden ? <Eye /> : <EyeOff />} onSelect={run(toggle)} keywords={['privacy', 'mask']}>
+                  {hidden ? 'Show amounts' : 'Hide amounts'}
                 </Item>
               </Group>
             </Command.List>
+            <div className="flex items-center gap-4 border-t border-border-subtle bg-surface-muted/40 px-5 py-2.5 text-[12px] text-text-faint max-md:hidden">
+              <span className="flex items-center gap-1.5">
+                <Kbd>↑</Kbd>
+                <Kbd>↓</Kbd> to move
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Kbd>↵</Kbd> to run
+              </span>
+              <span className="ml-auto flex items-center gap-1.5">
+                <Kbd>{mod}</Kbd>
+                <Kbd>K</Kbd> to toggle
+              </span>
+            </div>
           </Command>
         </DialogContent>
       )}
@@ -99,21 +124,25 @@ export function CommandBar() {
 
 function Group({ heading, children }: { heading: string; children: ReactNode }) {
   return (
-    <Command.Group heading={heading} className="mb-1 [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-text-faint">
+    <Command.Group
+      heading={heading}
+      className="mb-1 last:mb-0 [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:text-[11.5px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-text-faint"
+    >
       {children}
     </Command.Group>
   )
 }
 
-function Item({ icon, children, onSelect, shortcut }: { icon: ReactNode; children: string; onSelect: () => void; shortcut?: string }) {
+function Item({ icon, children, onSelect, shortcut, keywords }: { icon: ReactNode; children: string; onSelect: () => void; shortcut?: string; keywords?: string[] }) {
   return (
     <Command.Item
       onSelect={onSelect}
-      className="flex h-10 cursor-pointer items-center gap-3 rounded-[10px] px-3 text-[14px] text-text data-[selected=true]:bg-surface-muted [&_svg]:size-4 [&_svg]:text-text-muted"
+      keywords={keywords}
+      className="group flex h-11 cursor-pointer items-center gap-3 rounded-[10px] px-2.5 text-[14px] text-text transition-colors duration-75 data-[selected=true]:bg-surface-muted"
     >
-      {icon}
+      <span className="grid size-7 place-items-center rounded-[8px] border border-border bg-surface text-text-muted group-data-[selected=true]:text-text [&_svg]:size-[15px]">{icon}</span>
       <span className="flex-1">{children}</span>
-      {shortcut && <kbd className="rounded border border-border px-1.5 text-[11px] text-text-faint">{shortcut}</kbd>}
+      {shortcut && <Kbd>{shortcut}</Kbd>}
     </Command.Item>
   )
 }

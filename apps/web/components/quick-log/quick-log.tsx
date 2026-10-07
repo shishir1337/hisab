@@ -1,6 +1,6 @@
 'use client'
 
-import { addDays, convertFx, formatMoney, keypadToMinor, type KeypadKey } from '@hisab/core'
+import { addDays, convertFx, dayLabel, formatMoney, keypadToMinor, type KeypadKey } from '@hisab/core'
 import {
   createParty,
   createTransaction,
@@ -18,12 +18,12 @@ import {
   type TransactionView,
 } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
-import { Trash2 } from 'lucide-react'
+import { CalendarDays, Search, Trash2 } from 'lucide-react'
 import { createContext, use, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { Button } from '@/components/ui/button'
+import { Button, Kbd } from '@/components/ui/button'
 import { Chip, Select } from '@/components/ui/chip'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, Field } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { MASK, usePrivacy } from '@/lib/privacy'
 import { useProfile, useToday } from '@/lib/profile'
@@ -61,7 +61,7 @@ export function QuickLogProvider({ children }: { children: ReactNode }) {
       {children}
       <Dialog open={state.open} onOpenChange={(o) => setState((s) => ({ ...s, open: o }))}>
         {state.open && (
-          <DialogContent title={state.opts.edit ? 'Edit transaction' : 'Log money'} description="Type the amount, pick a category, press Enter.">
+          <DialogContent title={state.opts.edit ? 'Edit transaction' : 'Log money'}>
             <QuickLogForm key={state.key} options={state.opts} lists={lists} onDone={() => setState((s) => ({ ...s, open: false }))} />
           </DialogContent>
         )}
@@ -98,6 +98,7 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
   const [addingParty, setAddingParty] = useState(false)
   const [partyName, setPartyName] = useState('')
   const amountRef = useRef<HTMLInputElement>(null)
+  const dateRef = useRef<HTMLInputElement>(null)
   const editing = Boolean(options.edit)
 
   useEffect(() => {
@@ -120,6 +121,7 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
     for (const ch of amountText.replace(/,/g, '')) if (/[\d.]/.test(ch)) dispatch({ type: 'key', key: ch as KeypadKey })
   }, [amountText])
 
+  const selectedCategory = categories.find((c) => c.id === form.categoryId)
   const filtered = categories.filter((c) => c.name.toLowerCase().includes(catQuery.trim().toLowerCase()))
   const typed = keypadToMinor(form.keypad)
   const fxPreview = form.fx && typed !== null && /^\d{1,12}(\.\d{1,8})?$/.test(form.fx.rate) ? safeFx(typed, form.fx.rate) : null
@@ -178,7 +180,7 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
       }}
       className="flex flex-col gap-4"
     >
-      <div role="tablist" className="flex rounded-[12px] bg-surface-muted p-[3px]">
+      <div role="tablist" aria-label="Type" className="flex rounded-[12px] bg-surface-muted p-[3px] shadow-[inset_0_0_0_1px_var(--border-subtle)]">
         {TYPES.map((t) => (
           <button
             key={t.value}
@@ -189,15 +191,22 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
               dispatch({ type: 'setType', value: t.value, otherAccountId: accounts.find((a) => a.id !== form.accountId)?.id ?? null })
               setHint(null)
             }}
-            className={cn('h-8 flex-1 rounded-[10px] text-[13px]', form.type === t.value ? 'bg-surface font-semibold shadow-[0_1px_2px_rgba(0,0,0,0.08)]' : 'text-text-muted')}
+            className={cn(
+              'h-8 flex-1 rounded-[9px] text-[13px] transition-[background-color,color,box-shadow] duration-150',
+              form.type === t.value ? 'bg-surface font-semibold text-text shadow-[0_1px_2px_rgb(0_0_0/0.08),0_0_0_1px_var(--border)] dark:bg-[#26272a]' : 'text-text-muted hover:text-text',
+            )}
           >
             {t.label}
           </button>
         ))}
       </div>
 
-      <div className="flex items-center gap-3 rounded-[16px] border border-border px-4 py-2 focus-within:border-text-faint">
-        <span className="currency-code text-[15px]">{form.fx?.currency ?? currency}</span>
+      {/* Amount: the hero of the dialog. */}
+      <div
+        onClick={() => amountRef.current?.focus()}
+        className="flex cursor-text items-baseline gap-2 rounded-[16px] border border-border bg-surface-muted/40 px-4 pt-3 pb-2.5 transition-[border-color,box-shadow,background-color] duration-150 focus-within:border-text-faint focus-within:bg-surface focus-within:ring-4 focus-within:ring-brand/[0.06]"
+      >
+        <span className="num text-[15px] font-medium text-text-faint">{form.fx?.currency ?? currency}</span>
         <input
           ref={amountRef}
           aria-label="Amount"
@@ -209,26 +218,27 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
             setAmountText(e.target.value)
             setHint(null)
           }}
-          className="num h-12 w-full bg-transparent text-[30px] font-bold outline-none placeholder:text-text-faint"
+          className={cn(
+            'num h-12 w-full min-w-0 bg-transparent text-[40px] leading-none font-semibold tracking-[-0.03em] outline-none placeholder:text-text-faint/60',
+            form.type === 'income' && amountText && 'text-positive',
+          )}
         />
       </div>
-      {form.fx && <p className="-mt-2 text-[12.5px] text-text-muted">{fxPreview !== null ? `= ${formatMoney(fxPreview, currency, { grouping }).text}` : 'Enter the rate you got'}</p>}
+      {form.fx && <p className="-mt-2 px-1 text-[12.5px] text-text-muted">{fxPreview !== null ? `= ${formatMoney(fxPreview, currency, { grouping }).text}` : 'Enter the rate you got'}</p>}
 
       {form.type === 'transfer' ? (
-        <div className="grid grid-cols-2 gap-2">
-          <label className="text-[12px] text-text-muted">
-            From
-            <Select className="mt-1 w-full" value={form.accountId ?? ''} onChange={(e) => dispatch({ type: 'setAccount', id: e.target.value })}>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="From">
+            <Select wrapperClassName="w-full" value={form.accountId ?? ''} onChange={(e) => dispatch({ type: 'setAccount', id: e.target.value })}>
               {accounts.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
                 </option>
               ))}
             </Select>
-          </label>
-          <label className="text-[12px] text-text-muted">
-            To
-            <Select className="mt-1 w-full" value={form.toAccountId ?? ''} onChange={(e) => dispatch({ type: 'setToAccount', id: e.target.value })}>
+          </Field>
+          <Field label="To">
+            <Select wrapperClassName="w-full" value={form.toAccountId ?? ''} onChange={(e) => dispatch({ type: 'setToAccount', id: e.target.value })}>
               <option value="" disabled>
                 Choose…
               </option>
@@ -240,51 +250,108 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
                   </option>
                 ))}
             </Select>
-          </label>
+          </Field>
         </div>
       ) : (
-        <div>
-          <Input data-role="category-filter" aria-label="Find category" placeholder="Category — type to filter, Enter to pick" value={catQuery} onChange={(e) => setCatQuery(e.target.value)} className="h-10 text-[14px]" />
-          <div className="mt-2 flex max-h-[132px] flex-wrap gap-1.5 overflow-y-auto">
-            {filtered.map((c) => (
-              <Chip key={c.id} selected={form.categoryId === c.id} icon={<span>{c.icon}</span>} onClick={() => (dispatch({ type: 'setCategory', id: c.id }), setHint(null))}>
-                {c.name}
-              </Chip>
-            ))}
+        <div className="flex flex-col gap-2">
+          <label className="flex h-10 items-center gap-2 rounded-[12px] border border-border bg-surface px-3 transition-[border-color,box-shadow] duration-150 focus-within:border-text-faint focus-within:ring-4 focus-within:ring-brand/[0.06]">
+            <Search className="size-4 shrink-0 text-text-faint" aria-hidden />
+            <input
+              data-role="category-filter"
+              aria-label="Find category"
+              placeholder="Category — type to filter, Enter to pick"
+              value={catQuery}
+              onChange={(e) => setCatQuery(e.target.value)}
+              className="w-full min-w-0 bg-transparent text-[14px] outline-none placeholder:text-text-faint"
+            />
+            {selectedCategory && !catQuery && (
+              <span className="flex shrink-0 items-center gap-1 text-[12.5px] text-text-muted">
+                <span aria-hidden>{selectedCategory.icon}</span>
+                <span className="max-w-28 truncate">{selectedCategory.name}</span>
+              </span>
+            )}
+          </label>
+          <div className={cn('no-scrollbar overflow-y-auto', filtered.length > 18 && 'fade-y max-h-[176px] pb-3')}>
+            <div className="flex flex-wrap gap-1.5">
+              {filtered.map((c, i) => {
+                const on = form.categoryId === c.id
+                return (
+                  <Chip
+                    key={c.id}
+                    size="sm"
+                    selected={on}
+                    icon={<span aria-hidden>{c.icon}</span>}
+                    onClick={() => (dispatch({ type: 'setCategory', id: c.id }), setHint(null))}
+                    className={cn(!on && catQuery.trim() && i === 0 && 'border-text-faint/70 bg-surface-muted')}
+                  >
+                    {c.name}
+                  </Chip>
+                )
+              })}
+              {!lists.ready && categories.length === 0
+                ? [64, 92, 84, 108, 60, 76, 96].map((w, i) => <span key={i} aria-hidden className="skeleton h-8 rounded-full" style={{ width: w }} />)
+                : filtered.length === 0 && (
+                    <p className="w-full py-3 text-center text-[13px] text-text-muted">{catQuery.trim() ? `No category matches “${catQuery.trim()}”.` : 'No categories yet.'}</p>
+                  )}
+            </div>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-2">
-        {form.type !== 'transfer' && (
-          <label className="text-[12px] text-text-muted">
-            Account
-            <Select className="mt-1 w-full" value={form.accountId ?? ''} onChange={(e) => dispatch({ type: 'setAccount', id: e.target.value })}>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </Select>
-          </label>
+      <div className="flex flex-col gap-2.5 rounded-[14px] border border-border-subtle bg-surface-muted/40 px-3 py-3">
+        {form.type !== 'transfer' && accounts.length > 0 && (
+          <OptionRow label="Account">
+            {accounts.map((a) => (
+              <Chip key={a.id} size="sm" selected={(form.accountId ?? accounts[0]?.id) === a.id} onClick={() => dispatch({ type: 'setAccount', id: a.id })}>
+                {a.name}
+              </Chip>
+            ))}
+          </OptionRow>
         )}
-        <label className="text-[12px] text-text-muted">
-          Date
-          <input
-            type="date"
-            aria-label="Date"
-            max={today}
-            min={addDays(today, -3650)}
-            value={form.day}
-            onChange={(e) => e.target.value && dispatch({ type: 'setDay', day: e.target.value })}
-            className="mt-1 h-10 w-full rounded-[12px] border border-border bg-surface px-3 text-[14px] text-text"
-          />
-        </label>
-        {form.type === 'income' && (
-          <label className="text-[12px] text-text-muted">
-            From (optional)
+        <OptionRow label="Date">
+          <Chip size="sm" selected={form.day === today} onClick={() => dispatch({ type: 'setDay', day: today })}>
+            Today
+          </Chip>
+          <Chip size="sm" selected={form.day === addDays(today, -1)} onClick={() => dispatch({ type: 'setDay', day: addDays(today, -1) })}>
+            Yesterday
+          </Chip>
+          <span className="relative inline-flex">
+            <Chip
+              size="sm"
+              selected={form.day < addDays(today, -1)}
+              icon={<CalendarDays className="size-3.5" />}
+              onClick={() => {
+                const el = dateRef.current
+                if (!el) return
+                try {
+                  el.showPicker()
+                } catch {
+                  el.focus()
+                }
+              }}
+            >
+              {form.day < addDays(today, -1) ? dayLabel(form.day, today) : 'Pick a day'}
+            </Chip>
+            <input
+              ref={dateRef}
+              type="date"
+              aria-label="Date"
+              tabIndex={-1}
+              max={today}
+              min={addDays(today, -3650)}
+              value={form.day}
+              onChange={(e) => e.target.value && dispatch({ type: 'setDay', day: e.target.value })}
+              className="pointer-events-none absolute inset-0 opacity-0"
+            />
+          </span>
+        </OptionRow>
+      </div>
+
+      {form.type === 'income' && (
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="From (optional)">
             <Select
-              className="mt-1 w-full"
+              wrapperClassName="w-full"
               value={form.partyId ?? ''}
               onChange={(e) => {
                 if (e.target.value === '__new__') return setAddingParty(true)
@@ -299,14 +366,11 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
               ))}
               <option value="__new__">+ New…</option>
             </Select>
-          </label>
-        )}
-        {form.type === 'income' && (
-          <label className="flex items-end gap-2 text-[12px] text-text-muted">
-            <span className="flex-1">
-              Currency
+          </Field>
+          <div className="flex items-end gap-2">
+            <Field label="Currency" className="flex-1">
               <Select
-                className="mt-1 w-full"
+                wrapperClassName="w-full"
                 value={form.fx?.currency ?? ''}
                 onChange={(e) => {
                   if (!e.target.value) return form.fx && dispatch({ type: 'toggleFx' })
@@ -321,13 +385,11 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
                   </option>
                 ))}
               </Select>
-            </span>
-            {form.fx && (
-              <Input aria-label="Exchange rate" inputMode="decimal" placeholder="Rate" value={form.fx.rate} onChange={(e) => dispatch({ type: 'setFxRate', value: e.target.value })} className="h-10 w-24 text-[14px]" />
-            )}
-          </label>
-        )}
-      </div>
+            </Field>
+            {form.fx && <Input aria-label="Exchange rate" inputMode="decimal" placeholder="Rate" value={form.fx.rate} onChange={(e) => dispatch({ type: 'setFxRate', value: e.target.value })} className="num w-24" />}
+          </div>
+        </div>
+      )}
 
       {addingParty && (
         <div className="-mt-1 flex gap-2">
@@ -346,10 +408,10 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
               setPartyName('')
               setAddingParty(false)
             }}
-            className="h-10 text-[14px]"
           />
           <Button
             variant="secondary"
+            className="h-11"
             onClick={async () => {
               if (!partyName.trim()) return
               dispatch({ type: 'setParty', id: await createParty(db, userId, { name: partyName.trim(), kind: 'company' }) })
@@ -362,22 +424,34 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
         </div>
       )}
 
-      <Input aria-label="Note" placeholder="Note (optional)" value={form.note} maxLength={500} onChange={(e) => dispatch({ type: 'setNote', value: e.target.value })} className="h-10 text-[14px]" />
+      <Input aria-label="Note" placeholder="Note (optional)" value={form.note} maxLength={500} onChange={(e) => dispatch({ type: 'setNote', value: e.target.value })} />
 
-      <p role="alert" className={cn('-my-1 min-h-5 text-[13px] text-danger', !hint && 'invisible')}>
+      <p role="alert" className={cn('-my-1.5 min-h-5 text-[13px] text-danger', !hint && 'invisible')}>
         {hint ?? ' '}
       </p>
-      <div className="flex gap-2">
+      <div className="sticky -bottom-5 z-10 -mx-5 -mb-5 flex gap-2 border-t border-transparent bg-surface px-5 pt-1 pb-5 md:-bottom-6 md:-mx-6 md:-mb-6 md:px-6 md:pb-6">
         {editing && (
-          <Button variant="outline" size="icon" className="size-11" aria-label="Delete" onClick={() => void remove()}>
-            <Trash2 className="text-danger" />
+          <Button variant="danger" size="lg" className="w-12 px-0" aria-label="Delete" title="Delete" onClick={() => void remove()}>
+            <Trash2 />
           </Button>
         )}
-        <Button type="submit" className="flex-1" disabled={busy || !lists.ready}>
-          {editing ? 'Save changes' : 'Save'} <kbd className="ml-1 rounded bg-white/15 px-1.5 text-[11px] font-medium">↵</kbd>
+        <Button type="submit" size="lg" className="flex-1" disabled={busy || !lists.ready}>
+          {editing ? 'Save changes' : 'Save'}
+          <Kbd inverted className="ml-1 max-md:hidden">
+            ↵
+          </Kbd>
         </Button>
       </div>
     </form>
+  )
+}
+
+function OptionRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div role="group" aria-label={label} className="flex items-start gap-3">
+      <span className="w-[60px] shrink-0 pt-[7px] text-[12.5px] font-medium text-text-faint">{label}</span>
+      <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">{children}</div>
+    </div>
   )
 }
 
