@@ -52,6 +52,11 @@ function RootStack() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="account" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="recurring" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="loan-form" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="budget" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="due" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+          <Stack.Screen name="loan" options={{ animation: 'slide_from_right' }} />
         </Stack.Protected>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="sign-in" />

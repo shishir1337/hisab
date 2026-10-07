@@ -1,22 +1,25 @@
-import { addDays, balanceSeries } from '@hisab/core'
-import { Q, type TransactionView } from '@hisab/db'
+import { addDays, balanceSeries, loanProgress } from '@hisab/core'
+import { Q, QP, type LoanWithPayments, type TransactionView } from '@hisab/db'
 import { useQuery } from '@powersync/react'
 import { router } from 'expo-router'
 import { Wallet } from 'lucide-react-native'
 import { useMemo } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { Button } from '@/components/button'
+import { DueStrip } from '@/components/due-strip'
 import { HeroCard } from '@/components/hero-card'
 import { Money } from '@/components/money'
 import { Screen } from '@/components/screen'
 import { SyncPill } from '@/components/sync-pill'
 import { TransactionRow } from '@/components/transaction-row'
+import { useDueItems } from '@/features/plan/use-due'
 import { useQuickLog } from '@/features/quick-log/provider'
 import { useProfile, useToday } from '@/lib/profile'
 import { useSession } from '@/lib/session'
 import { useTheme } from '@/lib/theme'
 
 const TREND_DAYS = 30
+
 
 export default function HomeScreen() {
   const { currency, grouping, timeZone } = useProfile()
@@ -29,6 +32,9 @@ export default function HomeScreen() {
   const { data: net } = useQuery<{ day: string; net: number }>(Q.dailyNet, [addDays(today, -TREND_DAYS)])
   const { data: todays } = useQuery<TransactionView>(Q.transactionsBetween, [today, today])
 
+  const due = useDueItems(today, timeZone)
+  const { data: loans } = useQuery<LoanWithPayments>(QP.loansWithPayments)
+  const loansLeft = loans.reduce((sum, l) => sum + loanProgress(l, l.paid_count, l.paid_amount, today).remainingAmount, 0)
   const total = totalRows[0]?.total ?? 0
   const series = useMemo(() => balanceSeries(total, net, today, TREND_DAYS).map((p) => p.balance), [total, net, today])
   const spentToday = todays.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount_minor, 0)
@@ -38,8 +44,10 @@ export default function HomeScreen() {
       {!isLoading && accounts.length === 0 ? (
         <FirstAccount />
       ) : (
-        <HeroCard total={total} series={series} owedToYou={0} loansLeft={0} currency={currency} grouping={grouping} />
+        <HeroCard total={total} series={series} owedToYou={0} loansLeft={loansLeft} currency={currency} grouping={grouping} />
       )}
+
+      <DueStrip items={due} today={today} />
 
       <View className="mb-2 mt-6 flex-row items-baseline justify-between">
         <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Today</Text>
