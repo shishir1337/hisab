@@ -1,6 +1,7 @@
 import type { Grouping } from '@hisab/core'
 import { tokens } from '@hisab/tokens'
 import { useState } from 'react'
+import { usePrivacy } from '@/lib/privacy'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 import Svg, { Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from 'react-native-svg'
 import { useTheme } from '@/lib/theme'
@@ -19,14 +20,14 @@ interface HeroCardProps {
 export function HeroCard({ total, series, owedToYou, loansLeft, currency, grouping }: HeroCardProps) {
   const { scheme } = useTheme()
   const c = tokens.color[scheme]
-  const [hidden, setHidden] = useState(false)
+  const { hidden, toggle } = usePrivacy()
   const [width, setWidth] = useState(0)
 
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={hidden ? 'Show amounts' : 'Hide amounts'}
-      onPress={() => setHidden((h) => !h)}
+      onPress={toggle}
       className="overflow-hidden rounded-hero p-5"
       style={{ borderWidth: 1, borderColor: c.heroBorder }}
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}

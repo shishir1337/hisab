@@ -1,8 +1,13 @@
-import { Q, type AccountWithBalance } from '@hisab/db'
-import { useQuery } from '@powersync/react'
+import { Q, saveProfile, type AccountWithBalance } from '@hisab/db'
+import { usePowerSync, useQuery } from '@powersync/react'
 import { router } from 'expo-router'
-import { ChevronLeft, ChevronRight, LogOut, Plus } from 'lucide-react-native'
-import { Pressable, ScrollView, Switch, Text, View } from 'react-native'
+import { AlertTriangle, ChevronLeft, ChevronRight, LogOut, Plus } from 'lucide-react-native'
+import { Button } from '@/components/button'
+import { Chip } from '@/components/chip'
+import { useToast } from '@/lib/undo'
+import * as LocalAuthentication from 'expo-local-authentication'
+import { useState } from 'react'
+import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { NumberStepper } from '@/components/form'
 import { Money } from '@/components/money'
@@ -19,7 +24,19 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets()
   const { colors, preference, setPreference } = useTheme()
   const { user } = useSession()
-  const { currency, grouping } = useProfile()
+  const { userId, currency, grouping, timeZone, hideAmounts, appLock } = useProfile()
+  const db = usePowerSync()
+  const toast = useToast()
+  const { data: issues } = useQuery<{ n: number }>('select count(*) as n from upload_issues')
+  const [deleting, setDeleting] = useState(false)
+  const [confirmText, setConfirmText] = useState('')
+  const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  const signOut = async (wipe: boolean) => {
+    await cancelOwnNotifications().catch(() => {})
+    if (wipe) await db.disconnectAndClear().catch(() => {})
+    const { error } = await supabase.auth.signOut()
+    if (error) await supabase.auth.signOut({ scope: 'local' })
+  }
   const { data: accounts } = useQuery<AccountWithBalance>(Q.accountsWithBalance)
   const { prefs, update } = usePrefs()
   const nudgeHour = Number(prefs.nudgeTime.slice(0, 2))
@@ -70,6 +87,70 @@ export default function SettingsScreen() {
         </Pressable>
       </View>
 
+      <SectionTitle>Money</SectionTitle>
+      <View className="rounded-card border border-border bg-surface p-3.5">
+        <Text style={{ color: colors.textMuted, fontSize: 12.5, marginBottom: 6 }}>Currency</Text>
+        <View className="flex-row flex-wrap gap-2">
+          {['BDT', 'INR', 'PKR', 'USD', 'GBP', 'EUR', 'AED', 'SAR'].map((c) => (
+            <Chip key={c} size="sm" label={c} selected={currency === c} onPress={() => void saveProfile(db, userId, { base_currency: c })} />
+          ))}
+        </View>
+        <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 14, marginBottom: 6 }}>Number style</Text>
+        <Segmented
+          value={grouping}
+          onChange={(g) => void saveProfile(db, userId, { number_grouping: g })}
+          options={[
+            { value: 'south_asian', label: '2,48,350' },
+            { value: 'western', label: '248,350' },
+          ]}
+        />
+        <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 14, marginBottom: 6 }}>Time zone · {timeZone}</Text>
+        <View className="flex-row flex-wrap gap-2">
+          {[...new Set([deviceTz, 'Asia/Dhaka', 'Asia/Kolkata', 'Asia/Dubai', 'Europe/London', 'America/New_York'])].map((tz) => (
+            <Chip key={tz} size="sm" label={tz.split('/').pop()!.replace('_', ' ')} selected={timeZone === tz} onPress={() => void saveProfile(db, userId, { timezone: tz })} />
+          ))}
+        </View>
+      </View>
+
+      <SectionTitle>Privacy</SectionTitle>
+      <View className="rounded-card border border-border bg-surface px-3.5">
+        <View className="flex-row items-center justify-between py-3">
+          <View className="flex-1 pr-3">
+            <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>Hide amounts</Text>
+            <Text style={{ color: colors.textFaint, fontSize: 12 }}>Or tap the balance card. Handy when people are around.</Text>
+          </View>
+          <Switch value={hideAmounts} onValueChange={(v) => void saveProfile(db, userId, { hide_amounts: v })} trackColor={{ true: colors.brand }} accessibilityLabel="Hide amounts" />
+        </View>
+        <View className="flex-row items-center justify-between py-3" style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
+          <View className="flex-1 pr-3">
+            <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>App lock</Text>
+            <Text style={{ color: colors.textFaint, fontSize: 12 }}>Fingerprint, face or device PIN when opening Hisab</Text>
+          </View>
+          <Switch
+            value={appLock}
+            trackColor={{ true: colors.brand }}
+            accessibilityLabel="App lock"
+            onValueChange={async (v) => {
+              if (v) {
+                const level = await LocalAuthentication.getEnrolledLevelAsync()
+                if (level === LocalAuthentication.SecurityLevel.NONE) return toast({ message: 'Set a screen lock on your phone first.' })
+                const r = await LocalAuthentication.authenticateAsync({ promptMessage: 'Turn on app lock' })
+                if (!r.success) return
+              }
+              await saveProfile(db, userId, { app_lock_enabled: v })
+            }}
+          />
+        </View>
+      </View>
+
+      {(issues[0]?.n ?? 0) > 0 && (
+        <Pressable accessibilityRole="button" onPress={() => router.push('/issues')} className="mt-5 flex-row items-center gap-3 rounded-card border border-border bg-surface p-3.5">
+          <AlertTriangle size={18} color={colors.warning} />
+          <Text style={{ color: colors.text, fontSize: 14.5, flex: 1 }}>{issues[0]!.n} change{issues[0]!.n === 1 ? '' : 's'} couldn’t sync</Text>
+          <ChevronRight size={16} color={colors.textFaint} />
+        </Pressable>
+      )}
+
       <SectionTitle>Reminders</SectionTitle>
       <View className="rounded-card border border-border bg-surface px-3.5">
         <View className="flex-row items-center justify-between py-3">
@@ -108,20 +189,59 @@ export default function SettingsScreen() {
       <SectionTitle>Signed in</SectionTitle>
       <View className="rounded-card border border-border bg-surface px-3.5">
         <Text style={{ color: colors.textMuted, fontSize: 13.5, paddingVertical: 12 }}>{user?.email}</Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={async () => {
-            // Local data stays on this device for this account (per-user database); reminders don't.
-            await cancelOwnNotifications().catch(() => {})
-            const { error } = await supabase.auth.signOut()
-            if (error) await supabase.auth.signOut({ scope: 'local' })
-          }}
-          className="flex-row items-center gap-2 py-3"
-          style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}
-        >
-          <LogOut size={17} color={colors.danger} />
-          <Text style={{ color: colors.danger, fontSize: 14.5, fontWeight: '600' }}>Sign out</Text>
+        <Pressable accessibilityRole="button" onPress={() => void signOut(false)} className="flex-row items-center gap-2 py-3" style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
+          <LogOut size={17} color={colors.text} />
+          <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '600' }}>Sign out</Text>
         </Pressable>
+        <Pressable accessibilityRole="button" onPress={() => void signOut(true)} className="py-3" style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
+          <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>Sign out and remove data from this phone</Text>
+          <Text style={{ color: colors.textFaint, fontSize: 12 }}>Changes not yet synced will be lost</Text>
+        </Pressable>
+      </View>
+
+      <SectionTitle>Danger zone</SectionTitle>
+      <View className="rounded-card border border-border bg-surface p-3.5">
+        {!deleting ? (
+          <Pressable accessibilityRole="button" onPress={() => setDeleting(true)}>
+            <Text style={{ color: colors.danger, fontSize: 14.5, fontWeight: '600' }}>Delete my account</Text>
+            <Text style={{ color: colors.textFaint, fontSize: 12 }}>Permanently deletes your account and all your data.</Text>
+          </Pressable>
+        ) : (
+          <View>
+            <Text style={{ color: colors.text, fontSize: 14, marginBottom: 8 }}>Type DELETE to permanently delete your account and all data. This can’t be undone.</Text>
+            <TextInput
+              accessibilityLabel="Type DELETE"
+              autoCapitalize="characters"
+              value={confirmText}
+              onChangeText={setConfirmText}
+              placeholder="DELETE"
+              placeholderTextColor={colors.textFaint}
+              className="h-11 rounded-[12px] border border-border px-3"
+              style={{ color: colors.text, fontSize: 15 }}
+            />
+            <View className="mt-3 flex-row gap-2">
+              <View className="flex-1">
+                <Button variant="secondary" onPress={() => (setDeleting(false), setConfirmText(''))}>
+                  Cancel
+                </Button>
+              </View>
+              <View className="flex-1">
+                <Button
+                  disabled={confirmText !== 'DELETE'}
+                  onPress={async () => {
+                    const { error } = await supabase.functions.invoke('delete-account', { body: { confirm: 'DELETE' } })
+                    if (error) return toast({ message: 'Couldn’t delete the account. Check your connection and try again.' })
+                    await cancelOwnNotifications().catch(() => {})
+                    await db.disconnectAndClear().catch(() => {})
+                    await supabase.auth.signOut({ scope: 'local' })
+                  }}
+                >
+                  Delete forever
+                </Button>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
     </ScrollView>
   )

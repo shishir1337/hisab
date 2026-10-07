@@ -23,7 +23,7 @@ const TREND_DAYS = 30
 
 
 export default function HomeScreen() {
-  const { currency, grouping, timeZone } = useProfile()
+  const { currency, grouping, timeZone, onboardedAt, loaded } = useProfile()
   const today = useToday(timeZone)
   const { colors } = useTheme()
   const quickLog = useQuickLog()
@@ -46,6 +46,10 @@ export default function HomeScreen() {
   const { data: lendingTotals } = useQuery<{ owed_to_me: number; i_owe: number }>(QL.lendingTotals)
   const loansLeft = loans.reduce((sum, l) => sum + loanProgress(l, l.paid_count, l.paid_amount, today).remainingAmount, 0)
   const total = totalRows[0]?.total ?? 0
+  // First run: no accounts and never onboarded → the 2-minute setup.
+  useEffect(() => {
+    if (loaded && !isLoading && accounts.length === 0 && !onboardedAt) router.replace('/onboarding')
+  }, [loaded, isLoading, accounts.length, onboardedAt])
   const series = useMemo(() => balanceSeries(total, net, today, TREND_DAYS).map((p) => p.balance), [total, net, today])
   const spentToday = todays.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount_minor, 0)
 

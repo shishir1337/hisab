@@ -10,6 +10,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { PowerSyncProvider } from '@/lib/powersync'
 import { PrefsProvider } from '@/lib/prefs'
+import { PrivacyProvider } from '@/lib/privacy'
+import { AppLock } from '@/components/app-lock'
 import { SessionProvider, useSession } from '@/lib/session'
 import { ThemeProvider, useTheme } from '@/lib/theme'
 import { UndoProvider } from '@/lib/undo'
@@ -47,12 +49,14 @@ function RootStack() {
   }, [ready])
 
   if (!ready) return null
-  return (
+  const stack = (
     <>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.page } }}>
         <Stack.Protected guard={Boolean(user)}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="onboarding" options={{ animation: 'fade' }} />
+          <Stack.Screen name="issues" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
           <Stack.Screen name="account" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="recurring" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
@@ -69,5 +73,11 @@ function RootStack() {
         </Stack.Protected>
       </Stack>
     </>
+  )
+  if (!user) return stack
+  return (
+    <PrivacyProvider>
+      <AppLock>{stack}</AppLock>
+    </PrivacyProvider>
   )
 }
