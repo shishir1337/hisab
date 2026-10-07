@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
+    "@gorhom/bottom-sheet": "^5.2.14",
     "@hisab/core": "workspace:*",
     "@hisab/db": "workspace:*",
     "@hisab/tokens": "workspace:*",
