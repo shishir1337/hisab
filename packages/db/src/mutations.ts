@@ -175,12 +175,40 @@ export async function createParty(ex: Executor, userId: string, input: z.input<t
 
 // ---------------------------------------------------------------- bulk (web Activity table)
 
-export async function bulkSoftDelete(ex: Executor, ids: string[]): Promise<void> {
-  for (const id of ids) await softDeleteTransaction(ex, id)
+/** Types the Activity table may bulk-edit; EMI and lending movements are managed from their loan / person. */
+const BULK_TYPES = ['expense', 'income', 'transfer']
+
+/** Soft-deletes the selected expense/income/transfer rows (others are skipped); returns how many. */
+export async function bulkSoftDelete(ex: Executor, ids: string[]): Promise<number> {
+  if (ids.length === 0) return 0
+  const rows = await ex.getAll<{ id: string }>(
+    `select id from transactions where id in (${ids.map(() => '?').join(', ')}) and type in ('expense', 'income', 'transfer') and deleted_at is null`,
+    ids,
+  )
+  for (const { id } of rows) await softDeleteTransaction(ex, id)
+  return rows.length
 }
 
 export async function bulkRestore(ex: Executor, ids: string[]): Promise<void> {
   for (const id of ids) await restoreTransaction(ex, id)
+}
+
+/** Like bulkRecategorize, but returns each changed row's previous category (for Undo). */
+export async function bulkRecategorizeWithUndo(ex: Executor, ids: string[], categoryId: string): Promise<Record<string, string | null>> {
+  const cat = await ex.getOptional<{ kind: string }>('select kind from categories where id = ?', [categoryId])
+  if (!cat || ids.length === 0) return {}
+  const before = await ex.getAll<{ id: string; category_id: string | null }>(
+    `select id, category_id from transactions where id in (${ids.map(() => '?').join(', ')}) and type = ? and deleted_at is null`,
+    [...ids, cat.kind],
+  )
+  await bulkRecategorize(ex, ids, categoryId)
+  return Object.fromEntries(before.map((r) => [r.id, r.category_id]))
+}
+
+/** Restores categories from a { id → category_id } snapshot (Undo of a bulk recategorize). */
+export async function bulkSetCategories(ex: Executor, map: Record<string, string | null>): Promise<void> {
+  const ts = now()
+  for (const [id, categoryId] of Object.entries(map)) await ex.execute('update transactions set category_id = ?, updated_at = ? where id = ?', [categoryId, ts, id])
 }
 
 /** Sets the category on the selected rows whose type matches the category's kind; returns how many changed. */

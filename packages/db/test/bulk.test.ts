@@ -47,3 +47,31 @@ describe('bulk operations', () => {
     expect(rows.map((r) => r.type).sort()).toEqual(['expense', 'expense', 'income', 'transfer'])
   })
 })
+
+import { createLending } from '../src/people-mutations'
+import { createParty } from '../src/mutations'
+import { bulkSetCategories } from '../src/mutations'
+
+describe('m5 review fixes', () => {
+  it('bulk delete never touches EMI / lending movements', async () => {
+    const { db, e1 } = await setup()
+    const cash = (await db.getOptional<{ id: string }>("select id from accounts where name = 'Cash'"))!.id
+    const p = await createParty(db, U, { name: 'Rafiq' })
+    await createLending(db, U, { party_id: p, direction: 'lent', principal_minor: 100, started_on: '2026-10-07', account_id: cash })
+    const lendTx = (await db.getOptional<{ id: string }>("select id from transactions where type = 'lending_out'"))!.id
+    expect(await bulkSoftDelete(db, [e1, lendTx])).toBe(1)
+    expect(await db.getOptional("select deleted_at from transactions where id = ?", [lendTx])).toEqual({ deleted_at: null })
+  })
+
+  it('recategorize returns the previous categories so it can be undone', async () => {
+    const { db, e1, e2 } = await setup()
+    const food = defaultCategoryId(U, 'expense', 'Food')
+    const prev = await bulkRecategorizeWithUndo(db, [e1, e2], defaultCategoryId(U, 'expense', 'Rent'))
+    expect(prev).toEqual({ [e1]: food, [e2]: food })
+    await bulkSetCategories(db, prev)
+    const rows = await db.getAll<{ category_id: string }>('select category_id from transactions where id in (?, ?)', [e1, e2])
+    expect(rows.every((r) => r.category_id === food)).toBe(true)
+  })
+})
+
+import { bulkRecategorizeWithUndo } from '../src/mutations'

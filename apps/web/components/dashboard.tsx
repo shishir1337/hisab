@@ -1,7 +1,7 @@
 'use client'
 
 import { budgetProgress, dayLabel, monthLabel, monthlyReport, monthRange, safeToSpendPerDay, type ReportRow } from '@hisab/core'
-import { markEmiPaid, postOccurrence, Q, QP, softDeleteTransaction, type BudgetWithSpent, type DueItem, type TransactionView } from '@hisab/db'
+import { markEmiPaid, postOccurrence, Q, QP, skipOccurrence, softDeleteTransaction, unskipOccurrence, type BudgetWithSpent, type DueItem, type TransactionView } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
 import { ArrowLeftRight, Check } from 'lucide-react'
 import Link from 'next/link'
@@ -91,6 +91,18 @@ function DueList({ items, today }: { items: DueItem[]; today: string }) {
                 </p>
               </div>
               <Money minor={amount} currency={currency} grouping={grouping} className={cn('text-[14px] font-semibold', income && 'text-positive')} />
+              {item.kind === 'recurring' && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    await skipOccurrence(db, userId, item.rule.id, item.date)
+                    toast('Skipped', { action: { label: 'Undo', onClick: () => void unskipOccurrence(db, item.rule.id, item.date) } })
+                  }}
+                >
+                  Skip
+                </Button>
+              )}
               {(item.kind === 'recurring' || item.loan.default_account_id) && (
                 <Button size="icon" aria-label={item.kind === 'emi' ? 'Mark EMI paid' : 'Record'} onClick={() => void record(item)} className="size-9 rounded-full">
                   <Check />
@@ -122,7 +134,7 @@ function TodayList({ today }: { today: string }) {
         <ul className="-my-1 divide-y divide-border-subtle">
           {rows.map((t) => (
             <li key={t.id}>
-              <TxLine tx={t} onClick={() => ['expense', 'income', 'transfer'].includes(t.type) && quickLog.open({ edit: t })} />
+              <TxLine tx={t} onClick={['expense', 'income', 'transfer'].includes(t.type) ? () => quickLog.open({ edit: t }) : undefined} />
             </li>
           ))}
         </ul>
@@ -137,7 +149,7 @@ export function TxLine({ tx, onClick, showDate }: { tx: TransactionView; onClick
   const positive = tx.type === 'income' || tx.type === 'lending_in'
   const title = transfer ? `${tx.account_name} → ${tx.to_account_name}` : tx.note || tx.category_name || labelFor(tx.type)
   return (
-    <button type="button" onClick={onClick} className="flex w-full items-center gap-3 py-2.5 text-left">
+    <button type="button" onClick={onClick} disabled={!onClick} className="flex w-full items-center gap-3 py-2.5 text-left disabled:cursor-default">
       <span className="grid size-9 shrink-0 place-items-center rounded-[11px] bg-surface-muted text-[15px]">
         {transfer ? <ArrowLeftRight className="size-4 text-text-muted" /> : (tx.category_icon ?? '•')}
       </span>

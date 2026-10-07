@@ -2,14 +2,17 @@ import { AppShell } from '@/components/app-shell'
 import { CommandBar } from '@/components/command-bar'
 import { QuickLogProvider } from '@/components/quick-log/quick-log'
 import { PowerSyncProvider } from '@/lib/powersync/provider'
+import { PrivacyProvider } from '@/lib/privacy'
 
 export default function AppLayout({ children }: LayoutProps<'/'>) {
   return (
     <PowerSyncProvider fallback={<ShellSkeleton />}>
-      <QuickLogProvider>
-        <AppShell>{children}</AppShell>
-        <CommandBar />
-      </QuickLogProvider>
+      <PrivacyProvider>
+        <QuickLogProvider>
+          <AppShell>{children}</AppShell>
+          <CommandBar />
+        </QuickLogProvider>
+      </PrivacyProvider>
     </PowerSyncProvider>
   )
 }

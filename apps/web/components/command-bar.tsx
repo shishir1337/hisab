@@ -24,6 +24,8 @@ export function CommandBar() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
+        // Don't stack on top of another dialog (e.g. quick log).
+        if (!open && document.querySelector('[role="dialog"]')) return
         setOpen((o) => !o)
         return
       }
@@ -35,7 +37,7 @@ export function CommandBar() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [quickLog])
+  }, [quickLog, open])
 
   const run = (fn: () => void) => () => {
     setOpen(false)

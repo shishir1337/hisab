@@ -7,7 +7,7 @@ const jar = []
 const sb = createServerClient(process.env.SB_URL, process.env.SB_KEY, {
   cookies: { getAll: () => jar, setAll: (cs) => { for (const c of cs) { const i = jar.findIndex((j) => j.name === c.name); if (i >= 0) jar.splice(i, 1); jar.push(c) } } },
 })
-const { error } = await sb.auth.signInWithPassword({ email: 'e2e-temp@hisab.test', password: 'E2e-temp-Passw0rd!' })
+const { error } = await sb.auth.signInWithPassword({ email: process.env.E2E_EMAIL, password: process.env.E2E_PASSWORD })
 if (error) throw error
 
 const browser = await chromium.launch({ executablePath: process.env.CHROME })
@@ -31,8 +31,8 @@ const step = async (name, fn) => {
 await step('settings: add account', async () => {
   await page.goto(base + '/settings', { waitUntil: 'load' })
   await page.getByRole('button', { name: 'Add account' }).click()
-  await page.getByLabel('Name').fill('Cash')
-  await page.getByLabel('Balance').fill('5000')
+  await page.getByLabel('Name', { exact: true }).fill('Cash')
+  await page.getByLabel('Balance', { exact: true }).fill('5000')
   await page.getByRole('button', { name: 'Add account' }).last().click()
   await page.getByText('5,000 BDT').first().waitFor({ timeout: 5000 })
 })

@@ -1,10 +1,10 @@
 'use client'
 
 import { addMonths, monthLabel, monthRange, totalEffect } from '@hisab/core'
-import { bulkRecategorize, bulkRestore, bulkSoftDelete, Q, type CategoryOption, type TransactionView } from '@hisab/db'
+import { bulkRecategorizeWithUndo, bulkRestore, bulkSetCategories, bulkSoftDelete, Q, type CategoryOption, type TransactionView } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
 import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Search, Trash2 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { labelFor } from '@/components/dashboard'
 import { Money } from '@/components/money'
@@ -52,7 +52,11 @@ export function ActivityTable() {
     return out
   }, [rows, q, type, account, category, sort])
 
-  const allChecked = visible.length > 0 && visible.every((t) => selected.has(t.id))
+  // Selection never outlives what's on screen (month / filter changes clear it).
+  useEffect(() => setSelected(new Set()), [month, q, type, account, category])
+  const selectable = visible.filter((t) => EDITABLE.has(t.type))
+  const chosen = selectable.filter((t) => selected.has(t.id)).map((t) => t.id)
+  const allChecked = selectable.length > 0 && selectable.every((t) => selected.has(t.id))
   const toggle = (id: string) =>
     setSelected((s) => {
       const n = new Set(s)
@@ -62,21 +66,24 @@ export function ActivityTable() {
     })
 
   const deleteSelected = async () => {
-    const ids = [...selected]
-    await bulkSoftDelete(db, ids)
+    const ids = chosen
+    const n = await bulkSoftDelete(db, ids)
     setSelected(new Set())
-    toast(`Deleted ${ids.length}`, { action: { label: 'Undo', onClick: () => void bulkRestore(db, ids) } })
+    toast(`Deleted ${n}`, { action: { label: 'Undo', onClick: () => void bulkRestore(db, ids) } })
   }
   const recategorize = async (categoryId: string) => {
-    const ids = [...selected]
-    const n = await bulkRecategorize(db, ids, categoryId)
-    toast(n === ids.length ? `Recategorized ${n}` : `Recategorized ${n} of ${ids.length} (only matching expense/income rows)`)
+    const ids = chosen
+    const before = await bulkRecategorizeWithUndo(db, ids, categoryId)
+    const n = Object.keys(before).length
+    toast(n === ids.length ? `Recategorized ${n}` : `Recategorized ${n} of ${ids.length} (only matching expense/income rows)`, {
+      action: { label: 'Undo', onClick: () => void bulkSetCategories(db, before) },
+    })
     setSelected(new Set())
   }
 
   const isCurrent = month === monthRange(today).start
   const headerSort = (key: SortKey, label: string, className?: string) => (
-    <th className={cn('px-3 py-2.5 font-medium', className)}>
+    <th className={cn('px-3 py-2.5 font-medium', className)} aria-sort={sort.key === key ? (sort.dir === -1 ? 'descending' : 'ascending') : 'none'}>
       <button className="inline-flex items-center gap-1 hover:text-text" onClick={() => setSort((s) => ({ key, dir: s.key === key ? ((-s.dir) as 1 | -1) : -1 }))}>
         {label}
         {sort.key === key && (sort.dir === -1 ? <ArrowDown className="size-3" /> : <ArrowUp className="size-3" />)}
@@ -139,9 +146,9 @@ export function ActivityTable() {
         </Select>
       </div>
 
-      {selected.size > 0 && (
+      {chosen.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-[14px] bg-text px-4 py-2.5 text-page">
-          <span className="text-[13px] font-semibold">{selected.size} selected</span>
+          <span className="text-[13px] font-semibold">{chosen.length} selected</span>
           <Select aria-label="Recategorize" value="" onChange={(e) => e.target.value && void recategorize(e.target.value)} className="ml-auto h-9 border-transparent bg-white/10 text-page">
             <option value="">Move to category…</option>
             <optgroup label="Expense">
@@ -177,7 +184,7 @@ export function ActivityTable() {
                   type="checkbox"
                   aria-label="Select all"
                   checked={allChecked}
-                  onChange={() => setSelected(allChecked ? new Set() : new Set(visible.map((t) => t.id)))}
+                  onChange={() => setSelected(allChecked ? new Set() : new Set(selectable.map((t) => t.id)))}
                   className="size-4 accent-[var(--brand)]"
                 />
               </th>
@@ -202,11 +209,22 @@ export function ActivityTable() {
               return (
                 <tr
                   key={t.id}
+                  tabIndex={EDITABLE.has(t.type) ? 0 : undefined}
+                  aria-label={EDITABLE.has(t.type) ? `Edit ${t.note || t.category_name || labelFor(t.type)}` : undefined}
+                  onKeyDown={(e) => e.key === 'Enter' && EDITABLE.has(t.type) && quickLog.open({ edit: t })}
                   onClick={() => EDITABLE.has(t.type) && quickLog.open({ edit: t })}
                   className={cn('border-b border-border-subtle last:border-0', EDITABLE.has(t.type) && 'cursor-pointer hover:bg-surface-muted/60', selected.has(t.id) && 'bg-surface-muted')}
                 >
                   <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                    <input type="checkbox" aria-label="Select row" checked={selected.has(t.id)} onChange={() => toggle(t.id)} className="size-4 accent-[var(--brand)]" />
+                    <input
+                      type="checkbox"
+                      aria-label="Select row"
+                      disabled={!EDITABLE.has(t.type)}
+                      title={EDITABLE.has(t.type) ? undefined : 'Manage EMI / lending entries from Plan or People'}
+                      checked={selected.has(t.id)}
+                      onChange={() => toggle(t.id)}
+                      className="size-4 accent-[var(--brand)] disabled:opacity-30"
+                    />
                   </td>
                   <td className="num px-3 py-2.5 whitespace-nowrap text-text-muted">{t.occurred_on.slice(8)} {monthLabel(t.occurred_on).slice(0, 3)}</td>
                   <td className="max-w-[280px] truncate px-3 py-2.5">{transfer ? `${t.account_name} → ${t.to_account_name}` : t.note || t.party_name || labelFor(t.type)}</td>

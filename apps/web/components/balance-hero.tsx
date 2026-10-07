@@ -3,8 +3,9 @@
 import { addDays, balanceSeries, loanProgress } from '@hisab/core'
 import { Q, QL, QP, type LoanWithPayments } from '@hisab/db'
 import { useQuery } from '@powersync/react'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Money } from '@/components/money'
+import { usePrivacy } from '@/lib/privacy'
 import { useProfile, useToday } from '@/lib/profile'
 
 const TREND_DAYS = 30
@@ -13,7 +14,7 @@ const TREND_DAYS = 30
 export function BalanceHero() {
   const { currency, grouping, timeZone } = useProfile()
   const today = useToday(timeZone)
-  const [hidden, setHidden] = useState(false)
+  const { hidden, toggle } = usePrivacy()
   const { data: totalRows } = useQuery<{ total: number }>(Q.totalBalance)
   const { data: net } = useQuery<{ day: string; net: number }>(Q.dailyNet, [addDays(today, -TREND_DAYS)])
   const { data: lending } = useQuery<{ owed_to_me: number }>(QL.lendingTotals)
@@ -26,23 +27,23 @@ export function BalanceHero() {
   return (
     <section
       aria-label="Balance"
-      onClick={() => setHidden((h) => !h)}
+      role="button"
+      tabIndex={0}
+      aria-pressed={hidden}
+      onClick={toggle}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggle())}
       title={hidden ? 'Show amounts' : 'Hide amounts'}
       className="hero-card relative cursor-pointer overflow-hidden rounded-hero p-5 select-none md:p-6"
     >
       <div aria-hidden className="pointer-events-none absolute -top-10 -right-10 size-36 rounded-full bg-[radial-gradient(rgba(255,255,255,0.10),transparent_70%)]" />
       <p className="text-[12px] text-white/60">Total balance</p>
-      {hidden ? (
-        <p className="mt-0.5 text-[32px] leading-tight font-semibold tracking-widest">••••••</p>
-      ) : (
-        <Money minor={total} currency={currency} grouping={grouping} showDecimals="always" className="mt-0.5 block text-[32px] leading-tight font-semibold" />
-      )}
-      <Sparkline values={series} />
+      <Money minor={total} currency={currency} grouping={grouping} showDecimals="always" className="mt-0.5 block text-[32px] leading-tight font-semibold" />
+      {!hidden && <Sparkline values={series} />}
       <div className="mt-4 grid grid-cols-2 gap-2 text-[12px]">
-        <Tile label="Owed to you" hidden={hidden}>
+        <Tile label="Owed to you">
           <Money minor={owed} currency={currency} grouping={grouping} className={owed > 0 ? 'font-semibold text-[#4ADE80]' : 'font-semibold'} />
         </Tile>
-        <Tile label="Loans left" hidden={hidden}>
+        <Tile label="Loans left">
           <Money minor={loansLeft} currency={currency} grouping={grouping} className="font-semibold" />
         </Tile>
       </div>
@@ -50,11 +51,11 @@ export function BalanceHero() {
   )
 }
 
-function Tile({ label, hidden, children }: { label: string; hidden: boolean; children: React.ReactNode }) {
+function Tile({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="rounded-[12px] border border-white/[0.08] bg-white/[0.07] px-3 py-2">
       <p className="text-white/55">{label}</p>
-      {hidden ? <p className="font-semibold">••••</p> : children}
+      {children}
     </div>
   )
 }

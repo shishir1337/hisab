@@ -68,3 +68,7 @@ describe('toCsv', () => {
   it('guards against spreadsheet formula injection', () => expect(toCsv(['note'], [['=HYPERLINK("x")'], ['+1'], ['-2'], ['@a']])).toBe("note\r\n\"'=HYPERLINK(\"\"x\"\")\"\r\n'+1\r\n'-2\r\n'@a\r\n"))
   it('numbers and nulls', () => expect(toCsv(['n', 'm'], [[1450.5, null]])).toBe('n,m\r\n1450.5,\r\n'))
 })
+
+describe('toCsv review fixes', () => {
+  it('guards tab / CR-led cells too', () => expect(toCsv(['x'], [['\t=1'], ['\r=2']])).toBe('x\r\n\'\t=1\r\n"\'\r=2"\r\n'))
+})

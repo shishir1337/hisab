@@ -40,7 +40,8 @@ export function ReportView() {
         t.fx_rate,
       ]),
     )
-    download(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `hisab-${month.slice(0, 7)}.csv`)
+    // BOM so Excel on Windows reads Bangla / UTF-8 text correctly.
+    download(new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' }), `hisab-${month.slice(0, 7)}.csv`)
   }
 
   return (
@@ -141,7 +142,7 @@ function Kpi({ label, value, change, good, sub, tone }: { label: string; value: 
       {sub ? (
         <p className="text-[12px] text-text-muted">{sub}</p>
       ) : change != null ? (
-        <p className={cn('text-[12px]', better ? 'text-positive' : 'text-warning')}>
+        <p className={cn('text-[12px]', better === null ? 'text-text-muted' : better ? 'text-positive' : 'text-warning')}>
           {change > 0 ? '▲' : change < 0 ? '▼' : '•'} {Math.abs(Math.round(change * 100))}% vs last month
         </p>
       ) : (

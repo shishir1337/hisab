@@ -124,6 +124,7 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
 
   const save = async () => {
     if (busy || !lists.ready) return
+    if (amountText.trim() && !/^\d{1,10}(\.\d{1,2})?$/.test(amountText.replace(/,/g, '').trim())) return setHint('Enter an amount like 1450 or 1,450.50')
     const r = toDraft(form.accountId || form.type === 'transfer' ? form : { ...form, accountId: accounts[0]?.id ?? null }, new Date(), timeZone)
     if (!r.ok) return setHint(MISSING[r.missing])
     setBusy(true)
@@ -163,6 +164,8 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
         if (e.key === 'Enter' && (e.target as HTMLElement).dataset.role === 'category-filter') {
           e.preventDefault()
           if (!lists.ready) return
+          // Empty filter: Enter means "save", never "pick the first category".
+          if (!catQuery.trim()) return void save()
           if (!filtered[0]) return setHint('No category matches')
           dispatch({ type: 'setCategory', id: filtered[0].id })
           setCatQuery('')
@@ -325,7 +328,23 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
 
       {addingParty && (
         <div className="-mt-1 flex gap-2">
-          <Input aria-label="New company or client" autoFocus placeholder="Company or client name" value={partyName} onChange={(e) => setPartyName(e.target.value)} className="h-10 text-[14px]" />
+          <Input
+            aria-label="New company or client"
+            autoFocus
+            placeholder="Company or client name"
+            value={partyName}
+            onChange={(e) => setPartyName(e.target.value)}
+            onKeyDown={async (e) => {
+              if (e.key !== 'Enter') return
+              e.preventDefault()
+              e.stopPropagation()
+              if (!partyName.trim()) return
+              dispatch({ type: 'setParty', id: await createParty(db, userId, { name: partyName.trim(), kind: 'company' }) })
+              setPartyName('')
+              setAddingParty(false)
+            }}
+            className="h-10 text-[14px]"
+          />
           <Button
             variant="secondary"
             onClick={async () => {

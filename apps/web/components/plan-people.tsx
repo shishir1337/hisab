@@ -2,6 +2,7 @@
 
 import {
   addDays,
+  parseAmount,
   budgetProgress,
   formatMoney,
   lendingStatus,
@@ -30,7 +31,7 @@ import {
 } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
 import { Check, MessageCircle, Pause, Play } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Money } from '@/components/money'
 import { Button } from '@/components/ui/button'
@@ -67,8 +68,10 @@ export function PlanView() {
   const { data: budgets } = useQuery<BudgetWithSpent>(QP.budgetsWithSpent, [start, end])
   const { data: rules } = useQuery<RecurringRuleView>(QP.recurringRules)
   const { data: posted } = useQuery<{ rule_id: string; occurrence_date: string }>(QP.postedOccurrences)
+  const { data: skipped } = useQuery<{ rule_id: string; occurrence_date: string }>(QP.skippedOccurrences)
   const { data: loans } = useQuery<LoanWithPayments>(QP.loansWithPayments)
-  const done = groupOccurrences(posted)
+  const done = groupOccurrences([...posted, ...skipped])
+  const paying = useRef(new Set<string>())
   const overall = budgets.find((b) => !b.category_id)
 
   return (
@@ -162,11 +165,15 @@ export function PlanView() {
                         variant="secondary"
                         size="sm"
                         onClick={async () => {
+                          if (paying.current.has(l.id)) return
+                          paying.current.add(l.id)
                           try {
                             const id = await markEmiPaid(db, userId, l.id, { occurred_on: today })
                             toast(`EMI paid · ${l.name}`, { action: { label: 'Undo', onClick: () => void softDeleteTransaction(db, id) } })
                           } catch (e) {
                             toast(e instanceof Error ? e.message : 'Couldn’t record it')
+                          } finally {
+                            paying.current.delete(l.id)
                           }
                         }}
                       >
@@ -231,7 +238,7 @@ export function PeopleView() {
                   <tr key={p.id} className="border-b border-border-subtle last:border-0">
                     <td className="px-4 py-3 font-medium">{p.name}</td>
                     <td className={cn('px-4 py-3', overdue ? 'font-semibold text-warning' : 'text-text-muted')}>
-                      {owes ? 'Owes you' : owed ? 'You owe' : 'Settled'}
+                      {owes && owed ? `Owes you · you owe ${money(p.i_owe)}` : owes ? 'Owes you' : owed ? 'You owe' : 'Settled'}
                       {p.next_due ? (overdue ? ` · ● overdue since ${day(p.next_due)}` : ` · due ${day(p.next_due)}`) : ''}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -244,9 +251,14 @@ export function PeopleView() {
                             <MessageCircle /> WhatsApp
                           </Button>
                         )}
-                        {(owes || owed) && (
-                          <Button size="sm" variant="secondary" onClick={() => setRepay({ person: p, direction: owes ? 'lent' : 'borrowed' })}>
-                            {owes ? 'Got paid' : 'Paid back'}
+                        {owes && (
+                          <Button size="sm" variant="secondary" onClick={() => setRepay({ person: p, direction: 'lent' })}>
+                            Got paid
+                          </Button>
+                        )}
+                        {owed && (
+                          <Button size="sm" variant="secondary" onClick={() => setRepay({ person: p, direction: 'borrowed' })}>
+                            Paid back
                           </Button>
                         )}
                       </div>
@@ -287,8 +299,9 @@ function RepayForm({ person, direction, onDone }: { person: PersonWithBalance; d
       onSubmit={async (e) => {
         e.preventDefault()
         if (busy) return
-        const minor = Math.round(Number(amount.replace(/,/g, '')) * 100)
-        if (!Number.isFinite(minor) || minor <= 0) return setError('Enter the amount')
+        const parsed = parseAmount(amount)
+        if (!parsed.ok) return setError('Enter the amount, e.g. 1500 or 1,500.50')
+        const minor = parsed.minor
         if (!chosen) return setError('Add an account first (Settings)')
         setBusy(true)
         try {
