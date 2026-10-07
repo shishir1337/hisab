@@ -1,10 +1,10 @@
+'use client'
+
 import { computeDueItems, QP, type DueItem, type LoanWithPayments, type RecurringRuleView } from '@hisab/db'
 import { useQuery } from '@powersync/react'
 import { useMemo } from 'react'
 
-export type { DueItem }
-
-/** Live "Due soon" items (shared logic: @hisab/db computeDueItems). */
+/** Live "Due soon" items (shared logic with mobile: @hisab/db computeDueItems). */
 export function useDueItems(today: string, timeZone: string): DueItem[] {
   const { data: rules } = useQuery<RecurringRuleView>(QP.recurringRules)
   const { data: posted } = useQuery<{ rule_id: string; occurrence_date: string }>(QP.postedOccurrences)
