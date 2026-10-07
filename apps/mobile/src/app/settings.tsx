@@ -1,16 +1,16 @@
 import { Q, saveProfile, type AccountWithBalance } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
 import { router } from 'expo-router'
-import { AlertTriangle, ChevronLeft, ChevronRight, LogOut, Plus } from 'lucide-react-native'
+import * as LocalAuthentication from 'expo-local-authentication'
+import { AlertTriangle, ChevronRight, LogOut, Plus } from 'lucide-react-native'
+import { useState, type ReactNode } from 'react'
+import { Text, TextInput, View } from 'react-native'
 import { Button } from '@/components/button'
 import { Chip } from '@/components/chip'
-import { useToast } from '@/lib/undo'
-import * as LocalAuthentication from 'expo-local-authentication'
-import { useState } from 'react'
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { NumberStepper } from '@/components/form'
+import { NumberStepper, SwitchRow, TextField } from '@/components/form'
 import { Money } from '@/components/money'
+import { Press } from '@/components/press'
+import { Divider, SectionHeader, StackScreen } from '@/components/screen'
 import { Segmented } from '@/components/segmented'
 import { ACCOUNT_TYPE_META } from '@/features/accounts/meta'
 import { cancelOwnNotifications } from '@/lib/notifications'
@@ -19,9 +19,11 @@ import { useProfile } from '@/lib/profile'
 import { useSession } from '@/lib/session'
 import { supabase } from '@/lib/supabase'
 import { useTheme, type ThemePreference } from '@/lib/theme'
+import { useToast } from '@/lib/undo'
+
+const hourLabel = (h: number) => `${h % 12 || 12}:00 ${h < 12 ? 'AM' : 'PM'}`
 
 export default function SettingsScreen() {
-  const insets = useSafeAreaInsets()
   const { colors, preference, setPreference } = useTheme()
   const { user } = useSession()
   const { userId, currency, grouping, timeZone, hideAmounts, displayName } = useProfile()
@@ -64,62 +66,90 @@ export default function SettingsScreen() {
   const { data: accounts } = useQuery<AccountWithBalance>(Q.accountsWithBalance)
   const { prefs, update } = usePrefs()
   const nudgeHour = Number(prefs.nudgeTime.slice(0, 2))
+  const issueCount = issues[0]?.n ?? 0
+  const [name, setName] = useState<string | null>(null)
+  const nameValue = name ?? displayName ?? ''
 
   return (
-    <ScrollView contentContainerStyle={{ paddingTop: insets.top + 4, paddingHorizontal: 18, paddingBottom: insets.bottom + 40 }}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={() => router.back()} className="-ml-2 h-11 w-11 items-center justify-center">
-        <ChevronLeft size={24} color={colors.text} />
-      </Pressable>
-      <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 24, fontWeight: '700', letterSpacing: -0.5, marginBottom: 20 }}>
-        Settings
-      </Text>
+    <StackScreen title="Settings" subtitle={user?.email ?? undefined}>
+      {issueCount > 0 && (
+        <Press
+          accessibilityRole="button"
+          onPress={() => router.push('/issues')}
+          feedback="soft"
+          style={{ marginBottom: 8, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, borderWidth: 1, borderColor: colors.warning + '55', backgroundColor: colors.surface, padding: 14 }}
+        >
+          <AlertTriangle size={18} color={colors.warning} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '600' }}>
+              {issueCount} change{issueCount === 1 ? '' : 's'} couldn’t sync
+            </Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 1 }}>Review what the server refused</Text>
+          </View>
+          <ChevronRight size={18} color={colors.textFaint} />
+        </Press>
+      )}
 
-      <SectionTitle>Accounts</SectionTitle>
-      <View className="rounded-card border border-border bg-surface px-3.5">
+      <SectionHeader first title="Profile" description="How Hisab greets you." />
+      <TextField
+        accessibilityLabel="Your name"
+        value={nameValue}
+        onChangeText={setName}
+        placeholder="Your name"
+        maxLength={80}
+        onEndEditing={() => {
+          const v = nameValue.trim()
+          if (v !== (displayName ?? '')) pref({ display_name: v || null })
+          setName(null)
+        }}
+      />
+
+      <SectionHeader title="Accounts" description="Open one to rename it, change its balance or archive it." />
+      <Panel>
         {accounts.map((a, i) => {
           const meta = ACCOUNT_TYPE_META[a.type]
           return (
-            <Pressable
-              key={a.id}
-              accessibilityRole="button"
-              onPress={() => router.push({ pathname: '/account', params: { id: a.id } })}
-              className="flex-row items-center py-3"
-              style={[i > 0 && { borderTopWidth: 1, borderTopColor: colors.borderSubtle }, a.archived ? { opacity: 0.5 } : null]}
-            >
-              <View className="h-9 w-9 items-center justify-center rounded-tile bg-surface-muted">
-                <meta.icon size={17} color={colors.text} />
-              </View>
-              <View className="ml-3 flex-1">
-                <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>{a.name}</Text>
-                <Text style={{ color: colors.textFaint, fontSize: 12 }}>{a.archived ? 'Archived' : meta.label}</Text>
-              </View>
-              <Money minor={a.balance_minor} currency={currency} grouping={grouping} size={14} weight="600" color={colors.text} />
-              <ChevronRight size={16} color={colors.textFaint} style={{ marginLeft: 6 }} />
-            </Pressable>
+            <View key={a.id}>
+              {i > 0 && <Divider inset={52} />}
+              <Press
+                accessibilityRole="button"
+                accessibilityHint="Edit account"
+                onPress={() => router.push({ pathname: '/account', params: { id: a.id } })}
+                style={{ flexDirection: 'row', alignItems: 'center', minHeight: 60, paddingVertical: 10, opacity: a.archived ? 0.55 : 1 }}
+              >
+                <View style={{ width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted }}>
+                  <meta.icon size={18} color={colors.text} />
+                </View>
+                <View style={{ flex: 1, marginLeft: 12, marginRight: 8 }}>
+                  <Text numberOfLines={1} style={{ color: colors.text, fontSize: 15, fontWeight: '500' }}>
+                    {a.name}
+                  </Text>
+                  <Text style={{ color: colors.textFaint, fontSize: 12.5, marginTop: 1 }}>{a.archived ? 'Archived' : meta.label}</Text>
+                </View>
+                <Money minor={a.balance_minor} currency={currency} grouping={grouping} hideCode size={15} weight="600" color={colors.text} />
+                <ChevronRight size={16} color={colors.textFaint} style={{ marginLeft: 6, marginRight: -4 }} />
+              </Press>
+            </View>
           )
         })}
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.push('/account')}
-          className="flex-row items-center py-3"
-          style={accounts.length > 0 ? { borderTopWidth: 1, borderTopColor: colors.borderSubtle } : undefined}
-        >
-          <View className="h-9 w-9 items-center justify-center rounded-tile bg-surface-muted">
-            <Plus size={17} color={colors.text} />
+        {accounts.length > 0 && <Divider />}
+        <Press accessibilityRole="button" onPress={() => router.push('/account')} style={{ flexDirection: 'row', alignItems: 'center', minHeight: 56 }}>
+          <View style={{ width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.textFaint + '88' }}>
+            <Plus size={18} color={colors.text} />
           </View>
-          <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '600', marginLeft: 12 }}>Add account</Text>
-        </Pressable>
-      </View>
+          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600', marginLeft: 12 }}>Add account</Text>
+        </Press>
+      </Panel>
 
-      <SectionTitle>Money</SectionTitle>
-      <View className="rounded-card border border-border bg-surface p-3.5">
-        <Text style={{ color: colors.textMuted, fontSize: 12.5, marginBottom: 6 }}>Currency</Text>
-        <View className="flex-row flex-wrap gap-2">
+      <SectionHeader title="Money" description="Your home currency and how numbers are written." />
+      <Panel padded>
+        <FieldLabel>Currency</FieldLabel>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {['BDT', 'INR', 'PKR', 'USD', 'GBP', 'EUR', 'AED', 'SAR'].map((c) => (
             <Chip key={c} size="sm" label={c} selected={currency === c} onPress={() => pref({ base_currency: c })} />
           ))}
         </View>
-        <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 14, marginBottom: 6 }}>Number style</Text>
+        <FieldLabel spaced>Number style</FieldLabel>
         <Segmented
           value={grouping}
           onChange={(g) => pref({ number_grouping: g })}
@@ -128,146 +158,136 @@ export default function SettingsScreen() {
             { value: 'western', label: '248,350' },
           ]}
         />
-        <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 14, marginBottom: 6 }}>Time zone · {timeZone}</Text>
-        <View className="flex-row flex-wrap gap-2">
+        <FieldLabel spaced hint={timeZone}>
+          Time zone
+        </FieldLabel>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {[...new Set([deviceTz, 'Asia/Dhaka', 'Asia/Kolkata', 'Asia/Dubai', 'Europe/London', 'America/New_York'])].map((tz) => (
             <Chip key={tz} size="sm" label={tz.split('/').pop()!.replace('_', ' ')} selected={timeZone === tz} onPress={() => pref({ timezone: tz })} />
           ))}
         </View>
-      </View>
+      </Panel>
 
-      <SectionTitle>Privacy</SectionTitle>
-      <View className="rounded-card border border-border bg-surface px-3.5">
-        <View className="flex-row items-center justify-between py-3">
-          <View className="flex-1 pr-3">
-            <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>Hide amounts</Text>
-            <Text style={{ color: colors.textFaint, fontSize: 12 }}>Or tap the balance card. Handy when people are around.</Text>
-          </View>
-          <Switch value={hideAmounts} onValueChange={(v) => pref({ hide_amounts: v })} trackColor={{ true: colors.brand }} accessibilityLabel="Hide amounts" />
-        </View>
-        <View className="flex-row items-center justify-between py-3" style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
-          <View className="flex-1 pr-3">
-            <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>App lock</Text>
-            <Text style={{ color: colors.textFaint, fontSize: 12 }}>Fingerprint, face or device PIN when opening Hisab on this phone</Text>
-          </View>
-          <Switch
-            value={prefs.appLock}
-            trackColor={{ true: colors.brand }}
-            accessibilityLabel="App lock"
-            onValueChange={async (v) => {
-              if (v) {
-                const level = await LocalAuthentication.getEnrolledLevelAsync()
-                if (level === LocalAuthentication.SecurityLevel.NONE) return toast({ message: 'Set a screen lock on your phone first.' })
-                const r = await LocalAuthentication.authenticateAsync({ promptMessage: 'Turn on app lock' })
-                if (!r.success) return
-              }
-              update({ appLock: v })
-            }}
+      <SectionHeader title="Display" description="Privacy and appearance." />
+      <Panel>
+        <SwitchRow label="Hide amounts" description="Or tap the balance card. Handy when people are around." value={hideAmounts} onValueChange={(v) => pref({ hide_amounts: v })} />
+        <Divider />
+        <SwitchRow
+          label="App lock"
+          description="Fingerprint, face or device PIN when opening Hisab on this phone."
+          value={prefs.appLock}
+          onValueChange={async (v) => {
+            if (v) {
+              const level = await LocalAuthentication.getEnrolledLevelAsync()
+              if (level === LocalAuthentication.SecurityLevel.NONE) return toast({ message: 'Set a screen lock on your phone first.' })
+              const r = await LocalAuthentication.authenticateAsync({ promptMessage: 'Turn on app lock' })
+              if (!r.success) return
+            }
+            update({ appLock: v })
+          }}
+        />
+        <Divider />
+        <View style={{ paddingVertical: 14 }}>
+          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '500', marginBottom: 10 }}>Appearance</Text>
+          <Segmented<ThemePreference>
+            value={preference}
+            options={[
+              { value: 'system', label: 'System' },
+              { value: 'light', label: 'Light' },
+              { value: 'dark', label: 'Dark' },
+            ]}
+            onChange={setPreference}
           />
         </View>
-      </View>
+      </Panel>
 
-      {(issues[0]?.n ?? 0) > 0 && (
-        <Pressable accessibilityRole="button" onPress={() => router.push('/issues')} className="mt-5 flex-row items-center gap-3 rounded-card border border-border bg-surface p-3.5">
-          <AlertTriangle size={18} color={colors.warning} />
-          <Text style={{ color: colors.text, fontSize: 14.5, flex: 1 }}>{issues[0]!.n} change{issues[0]!.n === 1 ? '' : 's'} couldn’t sync</Text>
-          <ChevronRight size={16} color={colors.textFaint} />
-        </Pressable>
-      )}
-
-      <SectionTitle>Reminders</SectionTitle>
-      <View className="rounded-card border border-border bg-surface px-3.5">
-        <View className="flex-row items-center justify-between py-3">
-          <View className="flex-1 pr-3">
-            <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>Daily nudge</Text>
-            <Text style={{ color: colors.textFaint, fontSize: 12 }}>Only if you haven’t logged anything that day</Text>
-          </View>
-          <Switch value={prefs.nudgeEnabled} onValueChange={(v) => update({ nudgeEnabled: v })} trackColor={{ true: colors.brand }} accessibilityLabel="Daily nudge" />
-        </View>
+      <SectionHeader title="Reminders" description="Notifications on this phone." />
+      <Panel>
+        <SwitchRow label="Daily nudge" description="Only if you haven’t logged anything that day." value={prefs.nudgeEnabled} onValueChange={(v) => update({ nudgeEnabled: v })} />
         {prefs.nudgeEnabled && (
-          <View className="pb-3">
-            <Text style={{ color: colors.textMuted, fontSize: 12.5, marginBottom: 6 }}>
-              At {String(nudgeHour % 12 || 12)}:00 {nudgeHour < 12 ? 'AM' : 'PM'}
-            </Text>
-            <NumberStepper value={nudgeHour} min={6} max={23} onChange={(h) => update({ nudgeTime: `${String(h).padStart(2, '0')}:00` })} />
+          <View style={{ paddingBottom: 14 }}>
+            <NumberStepper
+              value={nudgeHour}
+              min={6}
+              max={23}
+              format={hourLabel}
+              accessibilityLabel="Nudge time"
+              onChange={(h) => update({ nudgeTime: `${String(h).padStart(2, '0')}:00` })}
+            />
           </View>
         )}
-        <View className="py-3" style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
-          <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>Remind about money owed every</Text>
-          <Text style={{ color: colors.textFaint, fontSize: 12, marginBottom: 6 }}>{prefs.reminderIntervalDays} days after the due date</Text>
-          <NumberStepper value={prefs.reminderIntervalDays} min={1} max={30} onChange={(n) => update({ reminderIntervalDays: n })} />
+        <Divider />
+        <View style={{ paddingVertical: 14 }}>
+          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '500' }}>Money owed to you</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 2, marginBottom: 10 }}>Remind again this often after the due date.</Text>
+          <NumberStepper
+            value={prefs.reminderIntervalDays}
+            min={1}
+            max={30}
+            format={(n) => (n === 1 ? 'Every day' : `Every ${n} days`)}
+            accessibilityLabel="Reminder interval"
+            onChange={(n) => update({ reminderIntervalDays: n })}
+          />
         </View>
-      </View>
+      </Panel>
 
-      <SectionTitle>Appearance</SectionTitle>
-      <Segmented<ThemePreference>
-        value={preference}
-        options={[
-          { value: 'system', label: 'System' },
-          { value: 'light', label: 'Light' },
-          { value: 'dark', label: 'Dark' },
-        ]}
-        onChange={setPreference}
-      />
-
-      <SectionTitle>Signed in</SectionTitle>
-      <View className="rounded-card border border-border bg-surface px-3.5">
-        <TextInput
-          key={displayName ?? ''}
-          accessibilityLabel="Your name"
-          defaultValue={displayName ?? ''}
-          placeholder="Your name"
-          placeholderTextColor={colors.textFaint}
-          maxLength={80}
-          onEndEditing={(e) => {
-            const v = e.nativeEvent.text.trim()
-            if (v !== (displayName ?? '')) pref({ display_name: v || null })
-          }}
-          style={{ color: colors.text, fontSize: 15, fontWeight: '500', paddingTop: 12, paddingBottom: 2 }}
-        />
-        <Text style={{ color: colors.textMuted, fontSize: 13.5, paddingBottom: 12 }}>{user?.email}</Text>
-        <Pressable accessibilityRole="button" onPress={() => void signOut(false)} className="flex-row items-center gap-2 py-3" style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
-          <LogOut size={17} color={colors.text} />
-          <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '600' }}>Sign out</Text>
-        </Pressable>
+      <SectionHeader title="Session" description="Signing out keeps your data on this phone for next time." />
+      <Panel>
+        <Press accessibilityRole="button" onPress={() => void signOut(false)} style={{ flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56 }}>
+          <LogOut size={18} color={colors.text} />
+          <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>Sign out</Text>
+        </Press>
+        <Divider />
         {wipeAsk === null ? (
-          <Pressable accessibilityRole="button" onPress={() => void askWipe()} className="py-3" style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
-            <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>Sign out and remove data from this phone</Text>
-            <Text style={{ color: colors.textFaint, fontSize: 12 }}>For a shared or old phone. Your synced data stays in your account.</Text>
-          </Pressable>
+          <Press accessibilityRole="button" onPress={() => void askWipe()} style={{ paddingVertical: 14 }}>
+            <Text style={{ color: colors.text, fontSize: 15, fontWeight: '500' }}>Sign out and remove data from this phone</Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 2 }}>For a shared or old phone. Your synced data stays in your account.</Text>
+          </Press>
         ) : (
-          <View className="py-3" style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
-            <Text style={{ color: wipeAsk > 0 ? colors.danger : colors.text, fontSize: 14, marginBottom: 10 }}>
+          <View style={{ paddingVertical: 14 }}>
+            <Text style={{ color: wipeAsk > 0 ? colors.danger : colors.text, fontSize: 14, lineHeight: 20, marginBottom: 12 }}>
               {wipeAsk > 0
                 ? `${wipeAsk} ${wipeAsk === 1 ? 'change hasn’t' : 'changes haven’t'} synced yet and will be lost. Connect to the internet first to keep ${wipeAsk === 1 ? 'it' : 'them'}.`
                 : 'Everything is synced. Remove Hisab’s data from this phone and sign out?'}
             </Text>
-            <View className="flex-row gap-2">
-              <View className="flex-1">
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <View style={{ flex: 1 }}>
                 <Button variant="secondary" onPress={() => setWipeAsk(null)}>
                   Cancel
                 </Button>
               </View>
-              <View className="flex-1">
-                <Button loading={busy} onPress={() => void signOut(true)}>
+              <View style={{ flex: 1 }}>
+                <Button variant={wipeAsk > 0 ? 'danger' : 'primary'} loading={busy} onPress={() => void signOut(true)}>
                   {wipeAsk > 0 ? 'Remove anyway' : 'Remove & sign out'}
                 </Button>
               </View>
             </View>
           </View>
         )}
-      </View>
+      </Panel>
 
-      <SectionTitle>Danger zone</SectionTitle>
-      <View className="rounded-card border border-border bg-surface p-3.5">
+      <SectionHeader title="Danger zone" description="Permanent. There’s no undo." />
+      <View style={{ borderRadius: 18, borderWidth: 1, borderColor: colors.danger + '40', backgroundColor: colors.surface, padding: 16 }}>
         {!deleting ? (
-          <Pressable accessibilityRole="button" onPress={() => setDeleting(true)}>
-            <Text style={{ color: colors.danger, fontSize: 14.5, fontWeight: '600' }}>Delete my account</Text>
-            <Text style={{ color: colors.textFaint, fontSize: 12 }}>Permanently deletes your account and all your data.</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.text, fontSize: 15, fontWeight: '500' }}>Delete my account</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 2 }}>Deletes your account and all your data.</Text>
+            </View>
+            <Press
+              accessibilityRole="button"
+              onPress={() => setDeleting(true)}
+              feedback="scale"
+              style={{ height: 38, paddingHorizontal: 14, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.danger + '66' }}
+            >
+              <Text style={{ color: colors.danger, fontSize: 13.5, fontWeight: '600' }}>Delete…</Text>
+            </Press>
+          </View>
         ) : (
           <View>
-            <Text style={{ color: colors.text, fontSize: 14, marginBottom: 8 }}>Type DELETE to permanently delete your account and all data. This can’t be undone.</Text>
+            <Text style={{ color: colors.text, fontSize: 14, lineHeight: 20, marginBottom: 10 }}>
+              Type <Text style={{ fontWeight: '700' }}>DELETE</Text> to permanently delete your account and all data. This can’t be undone.
+            </Text>
             <TextInput
               accessibilityLabel="Type DELETE"
               autoCapitalize="characters"
@@ -275,17 +295,17 @@ export default function SettingsScreen() {
               onChangeText={setConfirmText}
               placeholder="DELETE"
               placeholderTextColor={colors.textFaint}
-              className="h-11 rounded-[12px] border border-border px-3"
-              style={{ color: colors.text, fontSize: 15 }}
+              style={{ height: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 14, color: colors.text, fontSize: 15, letterSpacing: 1 }}
             />
-            <View className="mt-3 flex-row gap-2">
-              <View className="flex-1">
+            <View style={{ marginTop: 12, flexDirection: 'row', gap: 8 }}>
+              <View style={{ flex: 1 }}>
                 <Button variant="secondary" onPress={() => (setDeleting(false), setConfirmText(''))}>
                   Cancel
                 </Button>
               </View>
-              <View className="flex-1">
+              <View style={{ flex: 1 }}>
                 <Button
+                  variant="danger"
                   disabled={confirmText !== 'DELETE' || busy}
                   loading={busy}
                   onPress={async () => {
@@ -308,15 +328,22 @@ export default function SettingsScreen() {
           </View>
         )}
       </View>
-    </ScrollView>
+    </StackScreen>
   )
 }
 
-function SectionTitle({ children }: { children: string }) {
+/** Settings card: rows separated by hairlines (web: Panel). */
+function Panel({ children, padded }: { children: ReactNode; padded?: boolean }) {
+  const { colors } = useTheme()
+  return <View style={{ borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: padded ? 16 : 14, paddingVertical: padded ? 16 : 0 }}>{children}</View>
+}
+
+function FieldLabel({ children, hint, spaced }: { children: string; hint?: string; spaced?: boolean }) {
   const { colors } = useTheme()
   return (
-    <Text style={{ color: colors.textMuted, fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginTop: 22, marginBottom: 8 }}>
-      {children}
-    </Text>
+    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', marginTop: spaced ? 18 : 0, marginBottom: 10 }}>
+      <Text style={{ color: colors.text, fontSize: 14, fontWeight: '500' }}>{children}</Text>
+      {hint ? <Text style={{ color: colors.textFaint, fontSize: 12.5 }}>{hint}</Text> : null}
+    </View>
   )
 }

@@ -104,6 +104,7 @@ export function Screen({
       <Animated.ScrollView
         onScroll={header.onScroll}
         scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: GUTTER, paddingBottom: TAB_SCREEN_BOTTOM }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -155,6 +156,7 @@ export function StackScreen({ title, subtitle, actions, hero, children }: { titl
       <Animated.ScrollView
         onScroll={header.onScroll}
         scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingTop: insets.top + BAR_HEIGHT + 4, paddingHorizontal: GUTTER, paddingBottom: insets.bottom + 40 }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
@@ -217,6 +219,7 @@ export function FormScreen({ title, children, footer }: { title: string; childre
       <Animated.ScrollView
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
         scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingHorizontal: GUTTER, paddingTop: 4, paddingBottom: footer ? 24 : insets.bottom + 28 }}
         keyboardShouldPersistTaps="handled"
       >

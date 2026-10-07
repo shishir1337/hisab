@@ -94,6 +94,7 @@ export default function ActivityScreen() {
         stickySectionHeadersEnabled={false}
         onScroll={header.onScroll}
         scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingTop: insets.top + 12, paddingHorizontal: GUTTER, paddingBottom: TAB_SCREEN_BOTTOM }}

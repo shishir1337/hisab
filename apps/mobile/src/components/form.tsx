@@ -39,6 +39,7 @@ export function TextField(props: {
   maxLength?: number
   keyboardType?: TextInputProps['keyboardType']
   autoCapitalize?: TextInputProps['autoCapitalize']
+  onEndEditing?: () => void
   invalid?: boolean
 }) {
   const { colors } = useTheme()
@@ -112,6 +113,7 @@ export function NumberStepper({
   min = 0,
   max = 999,
   suffix,
+  format,
   accessibilityLabel = 'Value',
 }: {
   value: number
@@ -119,6 +121,8 @@ export function NumberStepper({
   min?: number
   max?: number
   suffix?: string
+  /** Show a formatted, read-only value (e.g. "9:00 PM") instead of an editable number. */
+  format?: (n: number) => string
   accessibilityLabel?: string
 }) {
   const { colors } = useTheme()
@@ -128,6 +132,11 @@ export function NumberStepper({
         <Minus size={18} color={value <= min ? colors.textFaint : colors.text} />
       </StepIcon>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 6 }}>
+        {format ? (
+          <Text accessibilityLabel={`${accessibilityLabel}: ${format(value)}`} accessibilityLiveRegion="polite" style={{ color: colors.text, fontSize: 16, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+            {format(value)}
+          </Text>
+        ) : (
         <TextInput
           accessibilityLabel={accessibilityLabel}
           keyboardType="number-pad"
@@ -139,6 +148,7 @@ export function NumberStepper({
           }}
           style={{ color: colors.text, fontSize: 17, fontWeight: '700', textAlign: 'center', minWidth: 36, padding: 0, fontVariant: ['tabular-nums'] }}
         />
+        )}
         {suffix ? <Text style={{ color: colors.textMuted, fontSize: 14 }}>{suffix}</Text> : null}
       </View>
       <StepIcon label="Increase" disabled={value >= max} onPress={() => onChange(Math.min(max, value + 1))}>
@@ -187,7 +197,7 @@ export function SwitchRow({ label, description, value, onValueChange }: { label:
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ true: colors.brand, false: colors.border }}
+        trackColor={{ true: colors.brand, false: scheme === 'dark' ? '#3A3B3F' : '#D9D9D4' }}
         thumbColor={value ? colors.brandFg : scheme === 'dark' ? colors.textMuted : '#FFFFFF'}
         accessibilityElementsHidden
         importantForAccessibility="no-hide-descendants"
