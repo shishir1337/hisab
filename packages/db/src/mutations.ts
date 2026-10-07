@@ -172,3 +172,27 @@ export async function createParty(ex: Executor, userId: string, input: z.input<t
   )
   return id
 }
+
+// ---------------------------------------------------------------- bulk (web Activity table)
+
+export async function bulkSoftDelete(ex: Executor, ids: string[]): Promise<void> {
+  for (const id of ids) await softDeleteTransaction(ex, id)
+}
+
+export async function bulkRestore(ex: Executor, ids: string[]): Promise<void> {
+  for (const id of ids) await restoreTransaction(ex, id)
+}
+
+/** Sets the category on the selected rows whose type matches the category's kind; returns how many changed. */
+export async function bulkRecategorize(ex: Executor, ids: string[], categoryId: string): Promise<number> {
+  const cat = await ex.getOptional<{ kind: 'income' | 'expense' }>('select kind from categories where id = ?', [categoryId])
+  if (!cat || ids.length === 0) return 0
+  const placeholders = ids.map(() => '?').join(', ')
+  const matching = await ex.getAll<{ id: string }>(
+    `select id from transactions where id in (${placeholders}) and type = ? and deleted_at is null`,
+    [...ids, cat.kind],
+  )
+  const ts = now()
+  for (const { id } of matching) await ex.execute('update transactions set category_id = ?, updated_at = ? where id = ?', [categoryId, ts, id])
+  return matching.length
+}

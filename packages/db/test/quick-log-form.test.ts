@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formReducer, initialForm, toDraft, type FormAction, type FormState } from './form'
+import { formReducer, initialForm, toDraft, type FormAction, type FormState } from '../src/quick-log-form'
 
 const CASH = '0192f5a0-0000-7000-8000-0000000000a1'
 const BANK = '0192f5a0-0000-7000-8000-0000000000a2'

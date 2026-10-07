@@ -3,7 +3,7 @@ import type { TransactionView } from '@hisab/db'
 import { createContext, use, useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '@/lib/theme'
-import type { QuickLogType } from './form'
+import type { QuickLogType } from '@hisab/db'
 import { QuickLogSheet } from './sheet'
 
 export interface OpenOptions {

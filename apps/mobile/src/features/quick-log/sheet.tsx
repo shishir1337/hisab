@@ -26,7 +26,7 @@ import { Segmented } from '@/components/segmented'
 import { useProfile, useToday } from '@/lib/profile'
 import { useTheme } from '@/lib/theme'
 import { useToast } from '@/lib/undo'
-import { formReducer, initialForm, toDraft, type QuickLogType } from './form'
+import { formReducer, initialForm, toDraft, type QuickLogType } from '@hisab/db'
 import type { OpenOptions } from './provider'
 import { checkBudgetAlerts } from '@/features/notify/budget-alerts'
 

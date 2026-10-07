@@ -120,5 +120,10 @@ export const Q = {
       where t.deleted_at is null and t.type = 'transfer' and a.deleted_at is null and a.archived_at is null and t.occurred_on >= ?1
     ) group by day having sum(delta) <> 0 order by day`,
 
+  /** params: [startDay, endDay] → rows for @hisab/core monthlyReport. */
+  reportRows: `select t.type, t.amount_minor, t.category_id, c.name as category_name, t.party_id, p.name as party_name
+    from transactions t left join categories c on c.id = t.category_id left join parties p on p.id = t.party_id
+    where t.deleted_at is null and t.occurred_on between ? and ?`,
+
   profile: `select * from profiles limit 1`,
 } as const

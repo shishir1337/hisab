@@ -1,5 +1,6 @@
 import { convertFx, keypadFromMinor, keypadReducer, keypadToMinor, localDate, type KeypadKey } from '@hisab/core'
-import type { TransactionDraft, TransactionView } from '@hisab/db'
+import type { TransactionDraft } from './mutations'
+import type { TransactionView } from './queries'
 
 /** Quick-log sheet form state (spec §7.3). Pure so it can be unit tested. */
 
