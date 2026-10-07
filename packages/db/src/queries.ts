@@ -126,4 +126,6 @@ export const Q = {
     where t.deleted_at is null and t.occurred_on between ? and ?`,
 
   profile: `select * from profiles limit 1`,
+
+  uploadIssues: `select * from upload_issues order by created_at desc`,
 } as const
