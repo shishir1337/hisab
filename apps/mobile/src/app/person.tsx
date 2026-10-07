@@ -22,7 +22,8 @@ type HistoryRow = { id: string; type: string; amount_minor: number; occurred_on:
 export default function PersonScreen() {
   const { id } = useLocalSearchParams<{ id: string }>()
   const db = usePowerSync()
-  const { userId, currency, grouping, timeZone } = useProfile()
+  const { userId, currency, grouping, timeZone, hideAmounts } = useProfile()
+  const shown = (minor: number) => (hideAmounts ? `${currency} ••••` : formatMoney(minor, currency, { grouping }).text)
   const today = useToday(timeZone)
   const { colors } = useTheme()
   const insets = useSafeAreaInsets()
@@ -130,7 +131,7 @@ export default function PersonScreen() {
           {direction === 'lent' && iOwe > 0 && (
             <Pressable accessibilityRole="button" onPress={() => router.push({ pathname: '/repay', params: { party: party.id, direction: 'borrowed' } })}>
               <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 2 }}>
-                You also owe {formatMoney(iOwe, currency, { grouping }).text} · <Text style={{ fontWeight: '600', color: colors.text }}>Paid back</Text>
+                You also owe {shown(iOwe)} · <Text style={{ fontWeight: '600', color: colors.text }}>Paid back</Text>
               </Text>
             </Pressable>
           )}
@@ -211,7 +212,7 @@ export default function PersonScreen() {
                     </Text>
                     <Text style={{ color: st.status === 'overdue' ? colors.warning : colors.textFaint, fontSize: 12 }}>
                       {st.status === 'settled' ? 'Settled' : st.status === 'overdue' ? '● Overdue' : st.status === 'partly_paid' ? 'Partly paid' : l.due_on ? `Due ${formatDay(l.due_on)}` : 'Open'}
-                      {l.repaid > 0 ? ` · ${formatMoney(l.repaid, currency, { grouping }).text} back` : ''}
+                      {l.repaid > 0 ? ` · ${shown(l.repaid)} back` : ''}
                     </Text>
                   </View>
                   <Money minor={l.principal_minor} currency={currency} grouping={grouping} hideCode size={14} weight="600" color={st.status === 'settled' ? colors.textFaint : colors.text} />

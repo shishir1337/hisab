@@ -11,18 +11,20 @@ export interface Profile {
   currency: string
   grouping: Grouping
   timeZone: string
+  displayName: string | null
 }
 
 /** Display preferences from the synced profile row, with defaults before the first sync. */
 export function useProfile(): Profile {
   const userId = useUserId()
-  const { data } = useQuery<{ base_currency: string | null; number_grouping: string | null; timezone: string | null }>(Q.profile)
+  const { data } = useQuery<{ base_currency: string | null; number_grouping: string | null; timezone: string | null; display_name: string | null }>(Q.profile)
   const p = data[0]
   return {
     userId,
     currency: p?.base_currency ?? 'BDT',
     grouping: (p?.number_grouping as Grouping | null) ?? 'south_asian',
     timeZone: p?.timezone ?? 'Asia/Dhaka',
+    displayName: p?.display_name ?? null,
   }
 }
 

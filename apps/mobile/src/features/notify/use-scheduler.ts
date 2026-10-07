@@ -13,7 +13,7 @@ const RECURRING_WINDOW_DAYS = 30
 
 /** Re-plans device notifications whenever relevant data or prefs change, and on foreground (spec §6.8). */
 export function useNotificationScheduler() {
-  const { currency, grouping, timeZone } = useProfile()
+  const { currency, grouping, timeZone, hideAmounts } = useProfile()
   const today = useToday(timeZone)
   const { prefs, ready } = usePrefs()
   const { data: loans } = useQuery<LoanWithPayments>(QP.loansWithPayments)
@@ -45,6 +45,7 @@ export function useNotificationScheduler() {
     return {
       currency,
       grouping,
+      hideAmounts,
       loans: loans.map((l) => ({ id: l.id, name: l.name, emi_amount_minor: l.emi_amount_minor, nextDueDate: loanProgress(l, l.paid_count, l.paid_amount, today).nextDueDate })),
       lendings: lendings.map((l) => ({
         id: l.id,
@@ -60,7 +61,7 @@ export function useNotificationScheduler() {
       loggedToday: (todayCount[0]?.n ?? 0) > 0,
       reminderIntervalDays: prefs.reminderIntervalDays,
     }
-  }, [currency, grouping, loans, lendings, rules, posted, skipped, todayCount, prefs, today, timeZone])
+  }, [currency, grouping, hideAmounts, loans, lendings, rules, posted, skipped, todayCount, prefs, today, timeZone])
 
   // One reconcile at a time, always planned from the latest input (no stale run can undo a newer one).
   const latest = useRef(input)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clearIssues, discardIssue, saveProfile } from '../src/profile'
+import { clearIssues, describeIssue, discardIssue, saveProfile } from '../src/profile'
 import { Q } from '../src/queries'
 import { createTestDb } from './sqlite'
 
@@ -13,6 +13,12 @@ describe('saveProfile', () => {
     const rows = await db.getAll<Record<string, unknown>>(Q.profile)
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ id: U, user_id: U, base_currency: 'USD', number_grouping: 'western', display_name: 'Amaiz' })
+  })
+  it('before the first sync, inserts only the patched columns (no defaults that would reset the server row)', async () => {
+    const db = createTestDb()
+    await saveProfile(db, U, { hide_amounts: true })
+    const row = (await db.getAll<Record<string, unknown>>(Q.profile))[0]!
+    expect(row).toMatchObject({ id: U, user_id: U, hide_amounts: 1, base_currency: null, number_grouping: null, timezone: null, app_lock_enabled: null })
   })
   it('booleans are stored as 0/1 locally', async () => {
     const db = createTestDb()
@@ -35,5 +41,13 @@ describe('upload issues', () => {
     expect((await db.getAll<{ id: string }>(Q.uploadIssues)).map((r) => r.id)).toEqual(['i2'])
     await clearIssues(db)
     expect(await db.getAll(Q.uploadIssues)).toEqual([])
+  })
+})
+
+describe('describeIssue', () => {
+  it('names what was refused so the user can re-enter it', () => {
+    expect(describeIssue({ table_name: 'transactions', op: 'PUT', payload: '{"note":"Lunch","occurred_on":"2026-10-08"}' })).toBe('New transaction · Lunch · 2026-10-08')
+    expect(describeIssue({ table_name: 'accounts', op: 'PATCH', payload: '{"name":"City Bank"}' })).toBe('Edited account · City Bank')
+    expect(describeIssue({ table_name: 'weird', op: 'X', payload: 'not json' })).toBe('weird')
   })
 })

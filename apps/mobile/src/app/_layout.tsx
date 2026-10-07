@@ -27,9 +27,7 @@ export default function RootLayout() {
             <PowerSyncProvider>
               <PrefsProvider>
                 <UndoProvider>
-                  <BottomSheetModalProvider>
-                    <RootStack />
-                  </BottomSheetModalProvider>
+                  <RootStack />
                 </UndoProvider>
               </PrefsProvider>
             </PowerSyncProvider>
@@ -74,10 +72,14 @@ function RootStack() {
       </Stack>
     </>
   )
-  if (!user) return stack
+  if (!user) return <BottomSheetModalProvider>{stack}</BottomSheetModalProvider>
+  // Sheets portal into BottomSheetModalProvider: keep it inside PrivacyProvider (so sheets see "hide
+  // amounts") and inside AppLock (so an open sheet can't show above the lock screen).
   return (
     <PrivacyProvider>
-      <AppLock>{stack}</AppLock>
+      <AppLock>
+        <BottomSheetModalProvider>{stack}</BottomSheetModalProvider>
+      </AppLock>
     </PrivacyProvider>
   )
 }

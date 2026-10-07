@@ -55,7 +55,7 @@ export function HeroCard({ total, series, owedToYou, loansLeft, currency, groupi
         <Money minor={total} currency={currency} grouping={grouping} size={32} color={c.heroText} showDecimals="always" />
       )}
 
-      {width > 0 && series.length > 1 && <Sparkline values={series} width={width - 40} />}
+      {!hidden && width > 0 && series.length > 1 && <Sparkline values={series} width={width - 40} />}
 
       <View className="mt-4 flex-row gap-2">
         {(

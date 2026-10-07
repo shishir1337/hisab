@@ -15,6 +15,7 @@ import { SyncPill } from '@/components/sync-pill'
 import { TransactionRow } from '@/components/transaction-row'
 import { useDueItems } from '@/features/plan/use-due'
 import { useQuickLog } from '@/features/quick-log/provider'
+import { useDataReady } from '@/lib/powersync'
 import { useProfile, useToday } from '@/lib/profile'
 import { useSession } from '@/lib/session'
 import { useTheme } from '@/lib/theme'
@@ -46,16 +47,21 @@ export default function HomeScreen() {
   const { data: lendingTotals } = useQuery<{ owed_to_me: number; i_owe: number }>(QL.lendingTotals)
   const loansLeft = loans.reduce((sum, l) => sum + loanProgress(l, l.paid_count, l.paid_amount, today).remainingAmount, 0)
   const total = totalRows[0]?.total ?? 0
-  // First run: no accounts and never onboarded → the 2-minute setup.
+  // First run: no accounts and never onboarded → the 2-minute setup. On a new phone the local database
+  // starts empty, so wait for the first sync — an existing user must never be sent through setup again.
+  const ready = useDataReady()
+  const empty = ready && !isLoading && accounts.length === 0
   useEffect(() => {
-    if (loaded && !isLoading && accounts.length === 0 && !onboardedAt) router.replace('/onboarding')
-  }, [loaded, isLoading, accounts.length, onboardedAt])
+    if (empty && loaded && !onboardedAt) router.replace('/onboarding')
+  }, [empty, loaded, onboardedAt])
   const series = useMemo(() => balanceSeries(total, net, today, TREND_DAYS).map((p) => p.balance), [total, net, today])
   const spentToday = todays.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount_minor, 0)
 
   return (
     <Screen title="Home" accessory={<HeaderAccessory />}>
-      {!isLoading && accounts.length === 0 ? (
+      {!ready && accounts.length === 0 ? (
+        <Downloading />
+      ) : empty ? (
         <FirstAccount />
       ) : (
         <HeroCard total={total} series={series} owedToYou={lendingTotals[0]?.owed_to_me ?? 0} loansLeft={loansLeft} currency={currency} grouping={grouping} />
@@ -78,7 +84,7 @@ export default function HomeScreen() {
         <View className="items-center rounded-card border border-border bg-surface px-6 py-8">
           <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '600' }}>Nothing logged today</Text>
           <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 3, textAlign: 'center' }}>
-            Every taka you track now saves a headache at month-end.
+            Everything you track now saves a headache at month-end.
           </Text>
           {accounts.length > 0 && (
             <View className="mt-4 w-full">
@@ -117,6 +123,18 @@ function HeaderAccessory() {
       >
         <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>{initial}</Text>
       </Pressable>
+    </View>
+  )
+}
+
+function Downloading() {
+  const { colors } = useTheme()
+  return (
+    <View className="rounded-hero border border-border bg-surface p-5">
+      <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>Getting your data…</Text>
+      <Text style={{ color: colors.textMuted, fontSize: 13.5, marginTop: 4 }}>
+        Your accounts and history are downloading to this phone. Connect to the internet if this takes a while.
+      </Text>
     </View>
   )
 }

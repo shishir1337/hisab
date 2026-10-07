@@ -211,7 +211,7 @@ export function ActivityTable() {
                   key={t.id}
                   tabIndex={EDITABLE.has(t.type) ? 0 : undefined}
                   aria-label={EDITABLE.has(t.type) ? `Edit ${t.note || t.category_name || labelFor(t.type)}` : undefined}
-                  onKeyDown={(e) => e.key === 'Enter' && EDITABLE.has(t.type) && quickLog.open({ edit: t })}
+                  onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && EDITABLE.has(t.type) && quickLog.open({ edit: t })}
                   onClick={() => EDITABLE.has(t.type) && quickLog.open({ edit: t })}
                   className={cn('border-b border-border-subtle last:border-0', EDITABLE.has(t.type) && 'cursor-pointer hover:bg-surface-muted/60', selected.has(t.id) && 'bg-surface-muted')}
                 >

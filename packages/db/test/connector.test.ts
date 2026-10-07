@@ -58,6 +58,20 @@ describe('SupabaseConnector.uploadData', () => {
     expect(complete).toHaveBeenCalledOnce()
   })
 
+  it('uploads a locally-created profile as an update of only the set columns (never an upsert)', async () => {
+    const sb = fakeSupabase()
+    const { db } = fakeDb([
+      {
+        op: UpdateType.PUT,
+        table: 'profiles',
+        id: 'u1',
+        opData: { user_id: 'u1', hide_amounts: 1, base_currency: null, display_name: null, updated_at: '2026-10-08T00:00:00Z' },
+      },
+    ])
+    await new SupabaseConnector(sb.client, {}).uploadData(db)
+    expect(sb.calls).toEqual([{ table: 'profiles', kind: 'update', payload: { hide_amounts: true, updated_at: '2026-10-08T00:00:00Z' }, id: 'u1' }])
+  })
+
   it('converts 0/1 to booleans for boolean columns', async () => {
     const sb = fakeSupabase()
     const { db } = fakeDb([

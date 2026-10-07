@@ -24,18 +24,42 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets()
   const { colors, preference, setPreference } = useTheme()
   const { user } = useSession()
-  const { userId, currency, grouping, timeZone, hideAmounts, appLock } = useProfile()
+  const { userId, currency, grouping, timeZone, hideAmounts, displayName } = useProfile()
   const db = usePowerSync()
   const toast = useToast()
   const { data: issues } = useQuery<{ n: number }>('select count(*) as n from upload_issues')
   const [deleting, setDeleting] = useState(false)
+  const [busy, setBusy] = useState(false)
   const [confirmText, setConfirmText] = useState('')
-  const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone
+  // Unsynced changes counted when "remove data" is tapped; non-null = asking for confirmation.
+  const [wipeAsk, setWipeAsk] = useState<number | null>(null)
+  const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+  const pref = (patch: Parameters<typeof saveProfile>[2]) =>
+    void saveProfile(db, userId, patch).catch((e: unknown) => toast({ message: e instanceof Error ? e.message : 'Couldn’t save' }))
   const signOut = async (wipe: boolean) => {
-    await cancelOwnNotifications().catch(() => {})
-    if (wipe) await db.disconnectAndClear().catch(() => {})
-    const { error } = await supabase.auth.signOut()
-    if (error) await supabase.auth.signOut({ scope: 'local' })
+    if (busy) return
+    setBusy(true)
+    try {
+      await cancelOwnNotifications().catch(() => {})
+      if (wipe) {
+        try {
+          await db.disconnectAndClear()
+        } catch {
+          return toast({ message: 'Couldn’t remove the data from this phone. You’re still signed in.' })
+        }
+      }
+      const { error } = await supabase.auth.signOut()
+      if (error) await supabase.auth.signOut({ scope: 'local' })
+    } finally {
+      setBusy(false)
+    }
+  }
+  const askWipe = async () => {
+    const [pending, parked] = await Promise.all([
+      db.get<{ n: number }>('select count(*) as n from ps_crud').catch(() => ({ n: 0 })),
+      db.get<{ n: number }>('select count(*) as n from upload_issues').catch(() => ({ n: 0 })),
+    ])
+    setWipeAsk(pending.n + parked.n)
   }
   const { data: accounts } = useQuery<AccountWithBalance>(Q.accountsWithBalance)
   const { prefs, update } = usePrefs()
@@ -92,13 +116,13 @@ export default function SettingsScreen() {
         <Text style={{ color: colors.textMuted, fontSize: 12.5, marginBottom: 6 }}>Currency</Text>
         <View className="flex-row flex-wrap gap-2">
           {['BDT', 'INR', 'PKR', 'USD', 'GBP', 'EUR', 'AED', 'SAR'].map((c) => (
-            <Chip key={c} size="sm" label={c} selected={currency === c} onPress={() => void saveProfile(db, userId, { base_currency: c })} />
+            <Chip key={c} size="sm" label={c} selected={currency === c} onPress={() => pref({ base_currency: c })} />
           ))}
         </View>
         <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 14, marginBottom: 6 }}>Number style</Text>
         <Segmented
           value={grouping}
-          onChange={(g) => void saveProfile(db, userId, { number_grouping: g })}
+          onChange={(g) => pref({ number_grouping: g })}
           options={[
             { value: 'south_asian', label: '2,48,350' },
             { value: 'western', label: '248,350' },
@@ -107,7 +131,7 @@ export default function SettingsScreen() {
         <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 14, marginBottom: 6 }}>Time zone · {timeZone}</Text>
         <View className="flex-row flex-wrap gap-2">
           {[...new Set([deviceTz, 'Asia/Dhaka', 'Asia/Kolkata', 'Asia/Dubai', 'Europe/London', 'America/New_York'])].map((tz) => (
-            <Chip key={tz} size="sm" label={tz.split('/').pop()!.replace('_', ' ')} selected={timeZone === tz} onPress={() => void saveProfile(db, userId, { timezone: tz })} />
+            <Chip key={tz} size="sm" label={tz.split('/').pop()!.replace('_', ' ')} selected={timeZone === tz} onPress={() => pref({ timezone: tz })} />
           ))}
         </View>
       </View>
@@ -119,15 +143,15 @@ export default function SettingsScreen() {
             <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>Hide amounts</Text>
             <Text style={{ color: colors.textFaint, fontSize: 12 }}>Or tap the balance card. Handy when people are around.</Text>
           </View>
-          <Switch value={hideAmounts} onValueChange={(v) => void saveProfile(db, userId, { hide_amounts: v })} trackColor={{ true: colors.brand }} accessibilityLabel="Hide amounts" />
+          <Switch value={hideAmounts} onValueChange={(v) => pref({ hide_amounts: v })} trackColor={{ true: colors.brand }} accessibilityLabel="Hide amounts" />
         </View>
         <View className="flex-row items-center justify-between py-3" style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
           <View className="flex-1 pr-3">
             <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>App lock</Text>
-            <Text style={{ color: colors.textFaint, fontSize: 12 }}>Fingerprint, face or device PIN when opening Hisab</Text>
+            <Text style={{ color: colors.textFaint, fontSize: 12 }}>Fingerprint, face or device PIN when opening Hisab on this phone</Text>
           </View>
           <Switch
-            value={appLock}
+            value={prefs.appLock}
             trackColor={{ true: colors.brand }}
             accessibilityLabel="App lock"
             onValueChange={async (v) => {
@@ -137,7 +161,7 @@ export default function SettingsScreen() {
                 const r = await LocalAuthentication.authenticateAsync({ promptMessage: 'Turn on app lock' })
                 if (!r.success) return
               }
-              await saveProfile(db, userId, { app_lock_enabled: v })
+              update({ appLock: v })
             }}
           />
         </View>
@@ -188,15 +212,50 @@ export default function SettingsScreen() {
 
       <SectionTitle>Signed in</SectionTitle>
       <View className="rounded-card border border-border bg-surface px-3.5">
-        <Text style={{ color: colors.textMuted, fontSize: 13.5, paddingVertical: 12 }}>{user?.email}</Text>
+        <TextInput
+          key={displayName ?? ''}
+          accessibilityLabel="Your name"
+          defaultValue={displayName ?? ''}
+          placeholder="Your name"
+          placeholderTextColor={colors.textFaint}
+          maxLength={80}
+          onEndEditing={(e) => {
+            const v = e.nativeEvent.text.trim()
+            if (v !== (displayName ?? '')) pref({ display_name: v || null })
+          }}
+          style={{ color: colors.text, fontSize: 15, fontWeight: '500', paddingTop: 12, paddingBottom: 2 }}
+        />
+        <Text style={{ color: colors.textMuted, fontSize: 13.5, paddingBottom: 12 }}>{user?.email}</Text>
         <Pressable accessibilityRole="button" onPress={() => void signOut(false)} className="flex-row items-center gap-2 py-3" style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
           <LogOut size={17} color={colors.text} />
           <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '600' }}>Sign out</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" onPress={() => void signOut(true)} className="py-3" style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
-          <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>Sign out and remove data from this phone</Text>
-          <Text style={{ color: colors.textFaint, fontSize: 12 }}>Changes not yet synced will be lost</Text>
-        </Pressable>
+        {wipeAsk === null ? (
+          <Pressable accessibilityRole="button" onPress={() => void askWipe()} className="py-3" style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
+            <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '500' }}>Sign out and remove data from this phone</Text>
+            <Text style={{ color: colors.textFaint, fontSize: 12 }}>For a shared or old phone. Your synced data stays in your account.</Text>
+          </Pressable>
+        ) : (
+          <View className="py-3" style={{ borderTopWidth: 1, borderTopColor: colors.borderSubtle }}>
+            <Text style={{ color: wipeAsk > 0 ? colors.danger : colors.text, fontSize: 14, marginBottom: 10 }}>
+              {wipeAsk > 0
+                ? `${wipeAsk} ${wipeAsk === 1 ? 'change hasn’t' : 'changes haven’t'} synced yet and will be lost. Connect to the internet first to keep ${wipeAsk === 1 ? 'it' : 'them'}.`
+                : 'Everything is synced. Remove Hisab’s data from this phone and sign out?'}
+            </Text>
+            <View className="flex-row gap-2">
+              <View className="flex-1">
+                <Button variant="secondary" onPress={() => setWipeAsk(null)}>
+                  Cancel
+                </Button>
+              </View>
+              <View className="flex-1">
+                <Button loading={busy} onPress={() => void signOut(true)}>
+                  {wipeAsk > 0 ? 'Remove anyway' : 'Remove & sign out'}
+                </Button>
+              </View>
+            </View>
+          </View>
+        )}
       </View>
 
       <SectionTitle>Danger zone</SectionTitle>
@@ -227,10 +286,16 @@ export default function SettingsScreen() {
               </View>
               <View className="flex-1">
                 <Button
-                  disabled={confirmText !== 'DELETE'}
+                  disabled={confirmText !== 'DELETE' || busy}
+                  loading={busy}
                   onPress={async () => {
+                    if (busy) return
+                    setBusy(true)
                     const { error } = await supabase.functions.invoke('delete-account', { body: { confirm: 'DELETE' } })
-                    if (error) return toast({ message: 'Couldn’t delete the account. Check your connection and try again.' })
+                    if (error) {
+                      setBusy(false)
+                      return toast({ message: 'Couldn’t delete the account. Check your connection and try again.' })
+                    }
                     await cancelOwnNotifications().catch(() => {})
                     await db.disconnectAndClear().catch(() => {})
                     await supabase.auth.signOut({ scope: 'local' })

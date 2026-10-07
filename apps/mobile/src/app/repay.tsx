@@ -20,7 +20,7 @@ import { useToast } from '@/lib/undo'
 export default function RepayScreen() {
   const { party: partyId, direction = 'lent' } = useLocalSearchParams<{ party: string; direction?: 'lent' | 'borrowed' }>()
   const db = usePowerSync()
-  const { userId, currency, grouping, timeZone } = useProfile()
+  const { userId, currency, grouping, timeZone, hideAmounts } = useProfile()
   const today = useToday(timeZone)
   const { colors } = useTheme()
   const toast = useToast()
@@ -58,7 +58,7 @@ export default function RepayScreen() {
       const ids = await recordPersonRepayment(db, userId, partyId, direction, { amount_minor: parsed.minor, account_id: chosen, occurred_on: day })
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       toast({
-        message: parsed.minor >= outstanding ? `Settled with ${name} 🎉` : `${formatMoney(parsed.minor, currency, { grouping }).text} recorded`,
+        message: parsed.minor >= outstanding ? `Settled with ${name} 🎉` : `${hideAmounts ? `${currency} ••••` : formatMoney(parsed.minor, currency, { grouping }).text} recorded`,
         onUndo: async () => {
           for (const id of ids) await softDeleteTransaction(db, id)
         },

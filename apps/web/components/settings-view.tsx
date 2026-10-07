@@ -5,6 +5,7 @@ import {
   archiveAccount,
   clearIssues,
   createAccount,
+  describeIssue,
   discardIssue,
   Q,
   saveProfile,
@@ -56,7 +57,7 @@ const EXPORT_TABLES = [
 export function SettingsView() {
   const db = usePowerSync()
   const router = useRouter()
-  const { userId, currency, grouping, timeZone } = useProfile()
+  const { userId, currency, grouping, timeZone, displayName } = useProfile()
   const { hidden, toggle } = usePrivacy()
   const { theme = 'system', setTheme } = useTheme()
   const { data: issues } = useQuery<UploadIssue>(Q.uploadIssues)
@@ -69,6 +70,33 @@ export function SettingsView() {
     void saveProfile(db, userId, patch).catch((e) =>
       toast(e instanceof Error ? e.message : 'Couldn’t save'),
     )
+
+  const [signingOut, setSigningOut] = useState(false)
+  // Unsynced changes counted when "remove data" is clicked; non-null = asking for confirmation.
+  const [wipeAsk, setWipeAsk] = useState<number | null>(null)
+  const askWipe = async () => {
+    const [pending, parked] = await Promise.all([
+      db.get<{ n: number }>('select count(*) as n from ps_crud').catch(() => ({ n: 0 })),
+      db.get<{ n: number }>('select count(*) as n from upload_issues').catch(() => ({ n: 0 })),
+    ])
+    setWipeAsk(pending.n + parked.n)
+  }
+  const signOut = async (wipe: boolean) => {
+    if (signingOut) return
+    setSigningOut(true)
+    if (wipe) {
+      try {
+        await db.disconnectAndClear()
+      } catch {
+        setSigningOut(false)
+        return toast('Couldn’t remove the data from this browser. You’re still signed in.')
+      }
+    }
+    const { error } = await getSupabase().auth.signOut()
+    if (error) await getSupabase().auth.signOut({ scope: 'local' })
+    router.replace('/sign-in')
+    router.refresh()
+  }
 
   const deleteAccount = async () => {
     if (confirm !== 'DELETE' || deleting) return
@@ -242,13 +270,14 @@ export function SettingsView() {
               {issues.length} change{issues.length === 1 ? '' : 's'} couldn’t sync
             </p>
             <p className="mb-3 text-[12.5px] text-text-muted">
-              Saved here, but the server refused them. Your other data is fine.
+              The server refused these changes, so they were undone. Re-enter any you still need — your other data is fine.
             </p>
             <ul className="divide-y divide-border-subtle">
               {issues.map((i) => (
                 <li key={i.id} className="flex items-center justify-between gap-3 py-2 text-[13px]">
-                  <span className="min-w-0 truncate">
-                    {i.table_name}: {i.message}
+                  <span className="min-w-0">
+                    <span className="block truncate">{describeIssue(i)}</span>
+                    <span className="block truncate text-[12px] text-text-faint">{i.message}</span>
                   </span>
                   <Button variant="ghost" size="sm" onClick={() => void discardIssue(db, i.id)}>
                     Dismiss
@@ -264,16 +293,46 @@ export function SettingsView() {
       </Section>
 
       <Section title="Account">
-        <Button
-          variant="outline"
-          onClick={async () => {
-            await getSupabase().auth.signOut()
-            router.replace('/sign-in')
-            router.refresh()
-          }}
-        >
-          <LogOut /> Sign out
-        </Button>
+        <label className="mb-3 block max-w-sm">
+          <span className="mb-1 block text-[12.5px] text-text-muted">Your name</span>
+          <Input
+            key={displayName ?? ''}
+            defaultValue={displayName ?? ''}
+            placeholder="What should Hisab call you?"
+            maxLength={80}
+            onBlur={(e) => {
+              const v = e.target.value.trim()
+              if (v !== (displayName ?? '')) pref({ display_name: v || null })
+            }}
+          />
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => void signOut(false)} disabled={signingOut}>
+            <LogOut /> Sign out
+          </Button>
+          {wipeAsk === null && (
+            <Button variant="ghost" onClick={() => void askWipe()} disabled={signingOut}>
+              Sign out and remove data from this browser
+            </Button>
+          )}
+        </div>
+        {wipeAsk !== null && (
+          <div className="mt-3 rounded-card border border-border bg-surface p-4">
+            <p className={wipeAsk > 0 ? 'text-[13.5px] text-danger' : 'text-[13.5px]'}>
+              {wipeAsk > 0
+                ? `${wipeAsk} ${wipeAsk === 1 ? 'change hasn’t' : 'changes haven’t'} synced yet and will be lost. Stay online until they sync to keep ${wipeAsk === 1 ? 'it' : 'them'}.`
+                : 'Everything is synced. Remove Hisab’s data from this browser (for a shared computer) and sign out?'}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <Button variant="outline" onClick={() => setWipeAsk(null)}>
+                Cancel
+              </Button>
+              <Button onClick={() => void signOut(true)} disabled={signingOut}>
+                {wipeAsk > 0 ? 'Remove anyway' : 'Remove & sign out'}
+              </Button>
+            </div>
+          </div>
+        )}
       </Section>
 
       <Section title="Danger zone">

@@ -13,7 +13,6 @@ export interface Profile {
   timeZone: string
   displayName: string | null
   hideAmounts: boolean
-  appLock: boolean
   onboardedAt: string | null
   /** False until the local profile query has returned (row may still be absent before first sync). */
   loaded: boolean
@@ -31,7 +30,6 @@ export function useProfile(): Profile {
     timeZone: p?.timezone ?? 'Asia/Dhaka',
     displayName: p?.display_name ?? null,
     hideAmounts: Boolean(p?.hide_amounts),
-    appLock: Boolean(p?.app_lock_enabled),
     onboardedAt: p?.onboarded_at ?? null,
     loaded: !isLoading,
   }

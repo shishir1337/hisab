@@ -4,8 +4,8 @@ import { usePowerSync, useQuery } from '@powersync/react'
 import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
 import { Check, Plus } from 'lucide-react-native'
-import { useState } from 'react'
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { useEffect, useRef, useState } from 'react'
+import { BackHandler, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '@/components/button'
 import { Chip } from '@/components/chip'
@@ -21,7 +21,7 @@ type Step = 'welcome' | 'currency' | 'accounts' | 'extras'
 /** First run (spec §7.3 Onboarding, target < 2 minutes): currency → accounts with balances → optional loans/people. */
 export default function OnboardingScreen() {
   const db = usePowerSync()
-  const { userId, currency, grouping } = useProfile()
+  const { userId, currency, grouping, onboardedAt, loaded } = useProfile()
   const { colors } = useTheme()
   const insets = useSafeAreaInsets()
   const { data: accounts } = useQuery<AccountWithBalance>(Q.accountsWithBalance)
@@ -34,27 +34,76 @@ export default function OnboardingScreen() {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  const addAccount = async () => {
-    if (busy) return
+  // Start from the saved preferences, not the defaults, once the profile has loaded.
+  const seeded = useRef(false)
+  useEffect(() => {
+    if (!loaded || seeded.current) return
+    seeded.current = true
+    setCur(currency)
+    setGroup(grouping)
+  }, [loaded, currency, grouping])
+
+  // Already set up (e.g. on another device, synced after this screen opened): nothing to do here.
+  useEffect(() => {
+    if (onboardedAt || (step === 'welcome' && accounts.length > 0)) router.replace('/')
+  }, [onboardedAt, step, accounts.length])
+
+  // Android back goes to the previous step instead of leaving the app.
+  useEffect(() => {
+    const prev: Partial<Record<Step, Step>> = { currency: 'welcome', accounts: 'currency', extras: 'accounts' }
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      const p = prev[step]
+      if (!p) return false
+      setStep(p)
+      return true
+    })
+    return () => sub.remove()
+  }, [step])
+
+  /** Adds the typed account. Returns false (with a message) if it couldn't. */
+  const addAccount = async (): Promise<boolean> => {
+    if (busy) return false
     let minor = 0
     if (balance.trim()) {
       const p = parseAmount(balance)
-      if (!p.ok) return setError('Enter the balance as a number, e.g. 25000')
+      if (!p.ok) {
+        setError('Enter the balance as a number, e.g. 25000')
+        return false
+      }
       minor = p.minor
     }
-    if (!name.trim()) return setError('Give it a name, e.g. Cash or City Bank')
+    if (!name.trim()) {
+      setError('Give it a name, e.g. Cash or City Bank')
+      return false
+    }
     setBusy(true)
-    await createAccount(db, userId, { name: name.trim(), type, opening_balance_minor: minor })
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-    setName('')
-    setBalance('')
-    setError(null)
-    setBusy(false)
+    try {
+      await createAccount(db, userId, { name: name.trim(), type, opening_balance_minor: minor })
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+      setName('')
+      setBalance('')
+      setError(null)
+      return true
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Couldn’t add the account')
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const save = async (patch: Parameters<typeof saveProfile>[2]): Promise<boolean> => {
+    try {
+      await saveProfile(db, userId, patch)
+      return true
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Couldn’t save')
+      return false
+    }
   }
 
   const finish = async () => {
-    await saveProfile(db, userId, { onboarded_at: new Date().toISOString() })
-    router.replace('/')
+    if (await save({ onboarded_at: new Date().toISOString() })) router.replace('/')
   }
 
   const progress = { welcome: 0, currency: 1, accounts: 2, extras: 3 }[step]
@@ -103,8 +152,7 @@ export default function OnboardingScreen() {
             <View className="mt-auto pt-8">
               <Button
                 onPress={async () => {
-                  await saveProfile(db, userId, { base_currency: cur, number_grouping: group })
-                  setStep('accounts')
+                  if (await save({ base_currency: cur, number_grouping: group })) setStep('accounts')
                 }}
               >
                 Continue
@@ -165,7 +213,8 @@ export default function OnboardingScreen() {
               <Button
                 disabled={accounts.length === 0 && !name.trim()}
                 onPress={async () => {
-                  if (name.trim()) await addAccount()
+                  if (name.trim() && !(await addAccount())) return
+                  setError(null)
                   setStep('extras')
                 }}
               >
@@ -186,6 +235,7 @@ export default function OnboardingScreen() {
             </View>
           </View>
         )}
+        {error && step !== 'accounts' && <Text style={{ color: colors.danger, fontSize: 13, marginTop: 12 }}>{error}</Text>}
       </ScrollView>
     </KeyboardAvoidingView>
   )

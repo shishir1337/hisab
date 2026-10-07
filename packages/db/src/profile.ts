@@ -27,21 +27,11 @@ export const profilePatch = z
   .partial()
 export type ProfilePatch = z.input<typeof profilePatch>
 
-const DEFAULTS = {
-  base_currency: 'BDT',
-  timezone: 'Asia/Dhaka',
-  number_grouping: 'south_asian',
-  nudge_enabled: 1,
-  nudge_time: '21:00',
-  lending_reminder_interval_days: 3,
-  theme: 'system',
-  app_lock_enabled: 0,
-  hide_amounts: 0,
-}
-
 /**
  * Saves profile fields. Before the first sync the row may not exist locally: it is created with the
- * server's id (= user id), so the later upload updates the server row instead of duplicating it.
+ * server's id (= user id) and only the patched columns, so the upload (see the connector) changes just
+ * those columns on the server row instead of resetting the rest to defaults. Readers fall back to
+ * defaults for the empty columns until the server row syncs down.
  */
 export async function saveProfile(ex: Executor, userId: string, patch: ProfilePatch): Promise<void> {
   const r = profilePatch.safeParse(patch)
@@ -55,7 +45,7 @@ export async function saveProfile(ex: Executor, userId: string, patch: ProfilePa
       if (cols.length === 0) return
       await tx.execute(`update profiles set ${cols.map((c) => `${c} = ?`).join(', ')}, updated_at = ? where id = ?`, [...cols.map((c) => values[c]), ts, userId])
     } else {
-      const row = { ...DEFAULTS, ...values, id: userId, user_id: userId, created_at: ts, updated_at: ts }
+      const row = { ...values, id: userId, user_id: userId, updated_at: ts }
       const cols = Object.keys(row)
       await tx.execute(`insert into profiles (${cols.join(', ')}) values (${cols.map(() => '?').join(', ')})`, cols.map((c) => row[c as keyof typeof row]))
     }
@@ -73,6 +63,38 @@ export interface UploadIssue {
   message: string
   payload: string
   created_at: string
+}
+
+const ISSUE_LABEL: Record<string, string> = {
+  transactions: 'Transaction',
+  accounts: 'Account',
+  categories: 'Category',
+  parties: 'Person / company',
+  loans: 'Loan',
+  lendings: 'Lending',
+  recurring_rules: 'Recurring item',
+  recurring_skips: 'Skipped recurring item',
+  budgets: 'Budget',
+  profiles: 'Settings',
+}
+const ISSUE_VERB: Record<string, string> = { PUT: 'New', PATCH: 'Edited', DELETE: 'Deleted' }
+
+/**
+ * Plain-language summary of a refused change, so the user knows what to re-enter, e.g.
+ * "New transaction · Lunch · 2026-10-08". The server's message is kept separately for support.
+ */
+export function describeIssue(issue: Pick<UploadIssue, 'table_name' | 'op' | 'payload'>): string {
+  const label = ISSUE_LABEL[issue.table_name] ?? issue.table_name
+  const verb = ISSUE_VERB[issue.op]
+  let data: Record<string, unknown> = {}
+  try {
+    data = JSON.parse(issue.payload) as Record<string, unknown>
+  } catch {
+    // keep the label only
+  }
+  const name = [data.name, data.note].find((v): v is string => typeof v === 'string' && v.trim() !== '')
+  const day = [data.occurred_on, data.started_on, data.starts_on].find((v): v is string => typeof v === 'string')
+  return [verb ? `${verb} ${label.toLowerCase()}` : label, name?.trim(), day].filter(Boolean).join(' · ')
 }
 
 /** Removes the parked record only — never user data. */

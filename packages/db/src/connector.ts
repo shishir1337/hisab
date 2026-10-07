@@ -34,6 +34,11 @@ function toServerRow(table: string, data: Record<string, unknown>): Record<strin
   return out
 }
 
+const PROFILE_KEYS = new Set(['id', 'user_id', 'created_at'])
+function profilePatch(data: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(data).filter(([k, v]) => v !== null && v !== undefined && !PROFILE_KEYS.has(k)))
+}
+
 export interface SupabaseConnectorOptions {
   /** PowerSync instance URL. When absent the app runs local-only (no sync). */
   powersyncUrl?: string
@@ -80,6 +85,13 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
       let result: { error: { code?: string; message: string } | null }
       switch (op.op) {
         case UpdateType.PUT:
+          if (op.table === 'profiles') {
+            // The server creates the profile at signup, so a local insert (made before the first sync)
+            // is only ever an edit: send just the columns that were set, never an upsert that would
+            // reset the rest of the row.
+            result = await table.update(profilePatch(data)).eq('id', op.id)
+            break
+          }
           // Default categories are seeded on every device with the same ids: never let a fresh
           // device's defaults overwrite the server copy (the user's renames/order win).
           result =

@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button'
 import { Chip, Select } from '@/components/ui/chip'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { MASK, usePrivacy } from '@/lib/privacy'
 import { useProfile, useToday } from '@/lib/profile'
 import { cn } from '@/lib/utils'
 
@@ -85,6 +86,7 @@ const MISSING = {
 function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists: Lists; onDone: () => void }) {
   const db = usePowerSync()
   const { userId, currency, grouping, timeZone } = useProfile()
+  const { hidden } = usePrivacy()
   const today = useToday(timeZone)
   const { accounts, parties } = lists
   const [form, dispatch] = useReducer(formReducer, undefined, () => initialForm({ today, accountId: options.edit ? null : (lists.accounts[0]?.id ?? null) }))
@@ -129,7 +131,8 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
     if (!r.ok) return setHint(MISSING[r.missing])
     setBusy(true)
     try {
-      const label = `${form.type === 'transfer' ? 'Transfer' : (categories.find((c) => c.id === form.categoryId)?.name ?? '')} ${formatMoney(r.draft.amount_minor, currency, { grouping }).text}`
+      const amount = hidden ? `${currency} ${MASK}` : formatMoney(r.draft.amount_minor, currency, { grouping }).text
+      const label = `${form.type === 'transfer' ? 'Transfer' : (categories.find((c) => c.id === form.categoryId)?.name ?? '')} ${amount}`
       if (editing && options.edit) {
         const before = options.edit
         await updateTransaction(db, before.id, r.draft)

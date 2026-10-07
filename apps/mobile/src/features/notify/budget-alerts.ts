@@ -11,6 +11,7 @@ export async function checkBudgetAlerts(
   expense: { category_id: string; amount_minor: number; occurred_on: string },
   currency: string,
   grouping: Grouping,
+  hideAmounts = false,
 ): Promise<void> {
   const { start, end } = monthRange(expense.occurred_on)
   const budgets = await db.getAll<BudgetWithSpent>(QP.budgetsWithSpent, [start, end])
@@ -20,7 +21,7 @@ export async function checkBudgetAlerts(
     const before = after - expense.amount_minor
     for (const t of budgetThresholdsCrossed(before, after, b.amount_minor)) {
       const name = b.category_name ?? 'Monthly budget'
-      const left = formatMoney(Math.max(0, b.amount_minor - after), currency, { grouping }).text
+      const left = hideAmounts ? `${currency} ••••` : formatMoney(Math.max(0, b.amount_minor - after), currency, { grouping }).text
       await notifyBudgetOnce(
         `${b.category_id ?? 'overall'}:${start}:${t}`,
         t === 100 ? `${name}: budget used up` : `${name}: 80% of budget used`,

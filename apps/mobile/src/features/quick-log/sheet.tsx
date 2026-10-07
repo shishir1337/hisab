@@ -133,7 +133,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
         const id = await createTransaction(db, profile.userId, draft)
         toast({ message: `Saved · ${label}`, onUndo: () => softDeleteTransaction(db, id) })
         if (draft.type === 'expense' && draft.category_id) {
-          void checkBudgetAlerts(db, { category_id: draft.category_id, amount_minor: draft.amount_minor, occurred_on: draft.occurred_on }, profile.currency, profile.grouping).catch(() => {})
+          void checkBudgetAlerts(db, { category_id: draft.category_id, amount_minor: draft.amount_minor, occurred_on: draft.occurred_on }, profile.currency, profile.grouping, profile.hideAmounts).catch(() => {})
         }
       }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
@@ -147,6 +147,9 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
     }
   }
 
+  // Toast text follows "Hide amounts"; what you type on the keypad is always shown.
+  const moneyText = (minor: number) => (profile.hideAmounts ? `${profile.currency} ••••` : formatMoney(minor, profile.currency, { grouping: profile.grouping }).text)
+
   const save = () => {
     const r = toDraft(form, new Date(), profile.timeZone)
     if (!r.ok) {
@@ -158,7 +161,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
       return
     }
     const name = form.type === 'transfer' ? 'Transfer' : (byId.get(form.categoryId!)?.name ?? '')
-    void commit(r.draft, `${name} ${formatMoney(r.draft.amount_minor, profile.currency, { grouping: profile.grouping }).text}`)
+    void commit(r.draft, `${name} ${moneyText(r.draft.amount_minor)}`)
   }
 
   const logSuggestion = (s: (typeof suggestions)[number]) => {
@@ -184,7 +187,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
         occurred_on: form.day,
         occurred_at: base?.occurred_at ?? new Date().toISOString(),
       }
-      await commit(draft, `${s.note || cat?.name || ''} ${formatMoney(s.amount_minor, profile.currency, { grouping: profile.grouping }).text}`)
+      await commit(draft, `${s.note || cat?.name || ''} ${moneyText(s.amount_minor)}`)
     })()
   }
 
@@ -233,7 +236,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
                   key={`${s.category_id}-${s.amount_minor}-${s.note}`}
                   size="sm"
                   icon={<Text style={{ fontSize: 13 }}>{c?.icon ?? '•'}</Text>}
-                  label={`${s.note || c?.name || ''} · ${formatMoney(s.amount_minor, profile.currency, { grouping: profile.grouping }).number}`}
+                  label={`${s.note || c?.name || ''} · ${profile.hideAmounts ? '••••' : formatMoney(s.amount_minor, profile.currency, { grouping: profile.grouping }).number}`}
                   onPress={() => logSuggestion(s)}
                 />
               )
@@ -245,6 +248,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
       {/* Amount */}
       <View className="items-center py-1">
         <Money
+          reveal
           minor={typed ?? 0}
           currency={form.fx ? form.fx.currency : profile.currency}
           grouping={profile.grouping}

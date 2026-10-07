@@ -1,5 +1,5 @@
 import { AppSchema, ensureDefaultCategories, SupabaseConnector } from '@hisab/db'
-import { PowerSyncContext } from '@powersync/react'
+import { PowerSyncContext, useStatus } from '@powersync/react'
 import { PowerSyncDatabase } from '@powersync/react-native'
 import { createContext, use, useEffect, useMemo, type ReactNode } from 'react'
 import { useSession } from './session'
@@ -10,6 +10,17 @@ const connector = new SupabaseConnector(supabase, { powersyncUrl: POWERSYNC_URL 
 
 const SyncConfigContext = createContext({ localOnly: !POWERSYNC_URL })
 export const useSyncConfig = () => use(SyncConfigContext)
+
+/**
+ * True once this device holds the user's data: always in local-only mode, otherwise after the first
+ * complete sync (persisted, so it stays true offline on later launches). Until then an empty local
+ * database means "not downloaded yet", not "new user" — never treat it as a first run.
+ */
+export function useDataReady(): boolean {
+  const { localOnly } = useSyncConfig()
+  const status = useStatus()
+  return localOnly || status.hasSynced === true
+}
 
 /**
  * One on-device SQLite file per user (`hisab-<userId>.db`). Signing out — voluntarily or because a

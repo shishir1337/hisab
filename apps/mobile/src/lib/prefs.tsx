@@ -1,14 +1,18 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { createContext, use, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 
-/** Device-local reminder preferences (spec §5.2 profiles columns; synced to the profile in M6). */
+/**
+ * Device-local preferences. Reminders depend on the phone, and app lock must be per phone: a lock turned
+ * on elsewhere could otherwise lock you out of a phone that has no screen lock.
+ */
 export interface Prefs {
   nudgeEnabled: boolean
   nudgeTime: string
   reminderIntervalDays: number
+  appLock: boolean
 }
 
-const DEFAULTS: Prefs = { nudgeEnabled: true, nudgeTime: '21:00', reminderIntervalDays: 3 }
+const DEFAULTS: Prefs = { nudgeEnabled: true, nudgeTime: '21:00', reminderIntervalDays: 3, appLock: false }
 const KEY = 'hisab.prefs'
 
 const PrefsContext = createContext<{ prefs: Prefs; ready: boolean; update: (p: Partial<Prefs>) => void }>({

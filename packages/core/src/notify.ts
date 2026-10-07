@@ -18,6 +18,8 @@ export interface PlannedNotification {
 export interface PlanInput {
   currency: string
   grouping: Grouping
+  /** "Hide amounts" is on: notifications show on the lock screen, so they must not reveal amounts either. */
+  hideAmounts?: boolean
   loans: { id: string; name: string; nextDueDate: string | null; emi_amount_minor: number }[]
   lendings: {
     id: string
@@ -74,7 +76,7 @@ export function zonedInstant(day: string, time: string, timeZone: string): Date 
 export function planNotifications(input: PlanInput, now: Date, timeZone: string): PlannedNotification[] {
   const today = localDate(now, timeZone)
   const lastDay = addDays(today, WINDOW_DAYS)
-  const money = (m: number) => formatMoney(m, input.currency, { grouping: input.grouping }).text
+  const money = (m: number) => (input.hideAmounts ? `${input.currency} ••••` : formatMoney(m, input.currency, { grouping: input.grouping }).text)
   const out: PlannedNotification[] = []
   const add = (n: Omit<PlannedNotification, 'fireAt'> & { day: string; time?: string }) => {
     const fireAt = zonedInstant(n.day, n.time ?? MORNING, timeZone)

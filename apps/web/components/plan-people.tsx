@@ -38,6 +38,7 @@ import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/chip'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { MASK, usePrivacy } from '@/lib/privacy'
 import { useProfile, useToday } from '@/lib/profile'
 import { cn } from '@/lib/utils'
 
@@ -201,6 +202,7 @@ export function PeopleView() {
   const { data: people } = useQuery<PersonWithBalance>(QL.peopleWithBalances)
   const [repay, setRepay] = useState<{ person: PersonWithBalance; direction: 'lent' | 'borrowed' } | null>(null)
   const money = (m: number) => formatMoney(m, currency, { grouping }).text
+  const { hidden } = usePrivacy()
 
   const remind = async (p: PersonWithBalance) => {
     if (!p.phone) return
@@ -238,7 +240,7 @@ export function PeopleView() {
                   <tr key={p.id} className="border-b border-border-subtle last:border-0">
                     <td className="px-4 py-3 font-medium">{p.name}</td>
                     <td className={cn('px-4 py-3', overdue ? 'font-semibold text-warning' : 'text-text-muted')}>
-                      {owes && owed ? `Owes you · you owe ${money(p.i_owe)}` : owes ? 'Owes you' : owed ? 'You owe' : 'Settled'}
+                      {owes && owed ? `Owes you · you owe ${hidden ? `${currency} ${MASK}` : money(p.i_owe)}` : owes ? 'Owes you' : owed ? 'You owe' : 'Settled'}
                       {p.next_due ? (overdue ? ` · ● overdue since ${day(p.next_due)}` : ` · due ${day(p.next_due)}`) : ''}
                     </td>
                     <td className="px-4 py-3 text-right">

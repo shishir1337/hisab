@@ -65,6 +65,18 @@ describe('planNotifications', () => {
   }
   const plan = (o: Partial<PlanInput>) => planNotifications({ ...base, ...o }, NOW, 'Asia/Dhaka')
 
+  it('hide amounts: no amount appears in any title or body', () => {
+    const out = plan({
+      hideAmounts: true,
+      loans: [{ id: 'l1', name: 'Home loan', nextDueDate: '2026-10-10', emi_amount_minor: 1500000 }],
+      lendings: [{ id: 'x', partyId: 'p', name: 'Rahim', direction: 'lent', outstanding: 500000, due_on: '2026-10-08' }],
+      recurring: [{ key: 'r:2026-10-09', title: 'Rent', date: '2026-10-09', amount_minor: 2500000, type: 'expense' }],
+    })
+    expect(out.length).toBeGreaterThan(0)
+    for (const n of out) expect(`${n.title} ${n.body}`).not.toMatch(/\d,\d|15,000|5,000|25,000/)
+    expect(out.find((n) => n.kind === 'lending')!.title).toBe('Rahim owes you BDT ••••')
+  })
+
   it('EMI: day before and on the day at 10:00 local; past times dropped', () => {
     const out = plan({ loans: [{ id: 'l1', name: 'Home loan', nextDueDate: '2026-10-10', emi_amount_minor: 1500000 }] })
     expect(out.map((n) => [n.id, n.fireAt.toISOString()])).toEqual([
