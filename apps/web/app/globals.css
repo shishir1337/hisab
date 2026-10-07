@@ -80,3 +80,19 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Print the monthly report as a clean PDF: hide app chrome, keep cards. */
+@media print {
+  aside,
+  header,
+  nav,
+  [data-sonner-toaster] {
+    display: none !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+}

@@ -92,7 +92,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <button
         onClick={() => quickLog.open()}
         aria-label="Log money"
-        className="fixed right-4 bottom-[88px] z-30 grid size-14 place-items-center rounded-full bg-brand text-brand-fg shadow-[0_10px_24px_rgba(0,0,0,0.25)] md:hidden"
+        className="fixed right-4 bottom-[88px] z-30 grid size-14 print:hidden place-items-center rounded-full bg-brand text-brand-fg shadow-[0_10px_24px_rgba(0,0,0,0.25)] md:hidden"
       >
         <Plus className="size-6" />
       </button>

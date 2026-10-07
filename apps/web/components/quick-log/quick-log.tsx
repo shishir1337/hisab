@@ -36,8 +36,23 @@ const QuickLogContext = createContext<{ open: (o?: OpenOptions) => void }>({ ope
 /** Opens the quick-log dialog (new entry or edit). */
 export const useQuickLog = () => use(QuickLogContext)
 
+interface Lists {
+  accounts: { id: string; name: string }[]
+  expenseCategories: CategoryOption[]
+  incomeCategories: CategoryOption[]
+  parties: { id: string; name: string }[]
+  /** False until the first local query results arrive (≈1s after a cold page load). */
+  ready: boolean
+}
+
 export function QuickLogProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<{ open: boolean; key: number; opts: OpenOptions }>({ open: false, key: 0, opts: {} })
+  // Loaded once and kept warm, so the dialog is usable the instant it opens (fast keyboard flow).
+  const { data: accounts, isLoading: l1 } = useQuery<{ id: string; name: string }>(Q.activeAccounts)
+  const { data: expenseCategories, isLoading: l2 } = useQuery<CategoryOption>(Q.categories, ['expense'])
+  const { data: incomeCategories } = useQuery<CategoryOption>(Q.categories, ['income'])
+  const { data: parties } = useQuery<{ id: string; name: string }>(Q.parties)
+  const lists: Lists = { accounts, expenseCategories, incomeCategories, parties, ready: !l1 && !l2 }
   const open = useCallback((opts: OpenOptions = {}) => setState((s) => ({ open: true, key: s.key + 1, opts })), [])
   const value = useMemo(() => ({ open }), [open])
   return (
@@ -46,7 +61,7 @@ export function QuickLogProvider({ children }: { children: ReactNode }) {
       <Dialog open={state.open} onOpenChange={(o) => setState((s) => ({ ...s, open: o }))}>
         {state.open && (
           <DialogContent title={state.opts.edit ? 'Edit transaction' : 'Log money'} description="Type the amount, pick a category, press Enter.">
-            <QuickLogForm key={state.key} options={state.opts} onDone={() => setState((s) => ({ ...s, open: false }))} />
+            <QuickLogForm key={state.key} options={state.opts} lists={lists} onDone={() => setState((s) => ({ ...s, open: false }))} />
           </DialogContent>
         )}
       </Dialog>
@@ -67,15 +82,13 @@ const MISSING = {
   rate: 'Enter the exchange rate you got',
 } as const
 
-function QuickLogForm({ options, onDone }: { options: OpenOptions; onDone: () => void }) {
+function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists: Lists; onDone: () => void }) {
   const db = usePowerSync()
   const { userId, currency, grouping, timeZone } = useProfile()
   const today = useToday(timeZone)
-  const { data: accounts } = useQuery<{ id: string; name: string }>(Q.activeAccounts)
-  const [form, dispatch] = useReducer(formReducer, undefined, () => initialForm({ today, accountId: null }))
-  const kind = form.type === 'income' ? 'income' : 'expense'
-  const { data: categories } = useQuery<CategoryOption>(Q.categories, [kind])
-  const { data: parties } = useQuery<{ id: string; name: string }>(Q.parties)
+  const { accounts, parties } = lists
+  const [form, dispatch] = useReducer(formReducer, undefined, () => initialForm({ today, accountId: options.edit ? null : (lists.accounts[0]?.id ?? null) }))
+  const categories = form.type === 'income' ? lists.incomeCategories : lists.expenseCategories
   const [amountText, setAmountText] = useState('')
   const [catQuery, setCatQuery] = useState('')
   const [hint, setHint] = useState<string | null>(null)
@@ -110,8 +123,8 @@ function QuickLogForm({ options, onDone }: { options: OpenOptions; onDone: () =>
   const fxPreview = form.fx && typed !== null && /^\d{1,12}(\.\d{1,8})?$/.test(form.fx.rate) ? safeFx(typed, form.fx.rate) : null
 
   const save = async () => {
-    if (busy) return
-    const r = toDraft(form, new Date(), timeZone)
+    if (busy || !lists.ready) return
+    const r = toDraft(form.accountId || form.type === 'transfer' ? form : { ...form, accountId: accounts[0]?.id ?? null }, new Date(), timeZone)
     if (!r.ok) return setHint(MISSING[r.missing])
     setBusy(true)
     try {
@@ -147,10 +160,13 @@ function QuickLogForm({ options, onDone }: { options: OpenOptions; onDone: () =>
       }}
       onKeyDown={(e) => {
         // Enter in the category filter picks the first match instead of submitting.
-        if (e.key === 'Enter' && (e.target as HTMLElement).dataset.role === 'category-filter' && filtered[0]) {
+        if (e.key === 'Enter' && (e.target as HTMLElement).dataset.role === 'category-filter') {
           e.preventDefault()
+          if (!lists.ready) return
+          if (!filtered[0]) return setHint('No category matches')
           dispatch({ type: 'setCategory', id: filtered[0].id })
           setCatQuery('')
+          setHint(null)
           amountRef.current?.focus()
         }
       }}
@@ -335,7 +351,7 @@ function QuickLogForm({ options, onDone }: { options: OpenOptions; onDone: () =>
             <Trash2 className="text-danger" />
           </Button>
         )}
-        <Button type="submit" className="flex-1" disabled={busy}>
+        <Button type="submit" className="flex-1" disabled={busy || !lists.ready}>
           {editing ? 'Save changes' : 'Save'} <kbd className="ml-1 rounded bg-white/15 px-1.5 text-[11px] font-medium">↵</kbd>
         </Button>
       </div>
