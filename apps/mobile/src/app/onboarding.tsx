@@ -146,7 +146,8 @@ export default function OnboardingScreen() {
                 <Button
                   variant="ghost"
                   onPress={async () => {
-                    await seedDemoData(db, userId, localDate(new Date(), Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'))
+                    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+                    await seedDemoData(db, userId, localDate(new Date(), tz), tz)
                     await save({ onboarded_at: new Date().toISOString() })
                     router.replace('/')
                   }}

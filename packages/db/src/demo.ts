@@ -1,4 +1,4 @@
-import { addDays, addMonths } from '@hisab/core'
+import { addDays, addMonths, zonedInstant } from '@hisab/core'
 import { defaultCategoryId, ensureDefaultCategories } from './defaults'
 import type { Executor } from './executor'
 import { createAccount, createParty, createTransaction } from './mutations'
@@ -10,13 +10,14 @@ import { createLoan, createRecurringRule, markEmiPaid, setBudget } from './plan-
  * salary, an EMI loan, money lent and borrowed, a budget, recurring items) so every screen can be
  * reviewed with real-looking data. Refuses to run if the user already has accounts.
  */
-export async function seedDemoData(ex: Executor, userId: string, today: string): Promise<boolean> {
+export async function seedDemoData(ex: Executor, userId: string, today: string, timeZone = 'Asia/Dhaka'): Promise<boolean> {
   const existing = await ex.getOptional<{ n: number }>('select count(*) as n from accounts where deleted_at is null')
   if ((existing?.n ?? 0) > 0) return false
   await ensureDefaultCategories(ex, userId)
   const cat = (name: string, kind: 'income' | 'expense' = 'expense') => defaultCategoryId(userId, kind, name)
   const start = addDays(today, -60)
-  const at = (day: string, hh: number) => `${day}T${String(hh).padStart(2, '0')}:15:00.000Z`
+  // Local wall-clock times (breakfast at 07:15, not 07:15 UTC).
+  const at = (day: string, hh: number) => zonedInstant(day, `${String(hh).padStart(2, '0')}:15`, timeZone).toISOString()
 
   const bank = await createAccount(ex, userId, { name: 'City Bank', type: 'bank', opening_balance_minor: 18_500_000, opening_date: start })
   const bkash = await createAccount(ex, userId, { name: 'bKash', type: 'mobile_wallet', opening_balance_minor: 650_000, opening_date: start })
