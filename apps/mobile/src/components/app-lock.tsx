@@ -1,11 +1,12 @@
 import * as LocalAuthentication from 'expo-local-authentication'
-import { Lock } from 'lucide-react-native'
+import { Fingerprint, Lock } from 'lucide-react-native'
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { AppState, StyleSheet, Text, View } from 'react-native'
 import { usePrefs } from '@/lib/prefs'
 import { supabase } from '@/lib/supabase'
 import { useTheme } from '@/lib/theme'
 import { useToast } from '@/lib/undo'
+import { BrandMark } from './brand'
 import { Button } from './button'
 
 const RELOCK_AFTER_MS = 60_000
@@ -86,29 +87,41 @@ export function AppLock({ children }: { children: ReactNode }) {
     <View style={{ flex: 1 }}>
       {children}
       {(showLock || (enabled && covered)) && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.page, alignItems: 'center', justifyContent: 'center', padding: 32, zIndex: 1000, elevation: 1000 }]}>
-          {showLock && ready && (
-            <>
-              <View className="h-14 w-14 items-center justify-center rounded-hero bg-brand">
-                <Lock size={24} color={colors.brandFg} />
-              </View>
-              <Text style={{ color: colors.text, fontSize: 20, fontWeight: '700', marginTop: 16 }}>Hisab is locked</Text>
-              <Text style={{ color: colors.textMuted, fontSize: 14, marginTop: 4, textAlign: 'center' }}>
-                {failed ? 'Couldn’t verify it’s you. Try again.' : 'Use your fingerprint, face or device PIN.'}
-              </Text>
-              <View className="mt-6 w-full">
-                <Button onPress={() => void unlock()}>Unlock</Button>
-              </View>
-              {failed && (
-                <View className="mt-2 w-full">
-                  {/* Signing out keeps this phone's data for when you sign back in. */}
-                  <Button variant="ghost" onPress={() => void supabase.auth.signOut({ scope: 'local' })}>
-                    Sign out instead
-                  </Button>
-                </View>
-              )}
-            </>
-          )}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.page, alignItems: 'center', justifyContent: 'center', padding: 28, zIndex: 1000, elevation: 1000 }]}>
+          {showLock && ready && <LockContent failed={failed} onUnlock={() => void unlock()} />}
+          {/* While covered for the app switcher (or before prefs load) show just the mark — never balances. */}
+          {!(showLock && ready) && <BrandMark size={48} />}
+        </View>
+      )}
+    </View>
+  )
+}
+
+/** The lock screen itself; exported so it can be checked visually without locking the app. */
+export function LockContent({ failed, onUnlock }: { failed: boolean; onUnlock: () => void }) {
+  const { colors } = useTheme()
+  return (
+    <View style={{ alignSelf: 'stretch', alignItems: 'center' }}>
+      <View style={{ width: 64, height: 64, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand }}>
+        <Lock size={26} color={colors.brandFg} />
+      </View>
+      <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 24, fontWeight: '700', letterSpacing: -0.5, marginTop: 20 }}>
+        Hisab is locked
+      </Text>
+      <Text accessibilityLiveRegion="polite" style={{ color: failed ? colors.danger : colors.textMuted, fontSize: 14.5, lineHeight: 21, marginTop: 6, textAlign: 'center' }}>
+        {failed ? 'Couldn’t verify it’s you. Try again.' : 'Use your fingerprint, face or device PIN.'}
+      </Text>
+      <View style={{ marginTop: 28, alignSelf: 'stretch' }}>
+        <Button onPress={onUnlock} icon={<Fingerprint size={18} color={colors.brandFg} />}>
+          Unlock
+        </Button>
+      </View>
+      {failed && (
+        <View style={{ marginTop: 6, alignSelf: 'stretch' }}>
+          {/* Signing out keeps this phone's data for when you sign back in. */}
+          <Button variant="ghost" onPress={() => void supabase.auth.signOut({ scope: 'local' })}>
+            Sign out instead
+          </Button>
         </View>
       )}
     </View>

@@ -2,6 +2,7 @@ import * as Linking from 'expo-linking'
 import { router } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Text, View } from 'react-native'
+import { BrandMark } from '@/components/brand'
 import { Button } from '@/components/button'
 import { supabase } from '@/lib/supabase'
 import { useTheme } from '@/lib/theme'
@@ -42,18 +43,23 @@ export default function AuthCallback() {
 
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, backgroundColor: colors.page }}>
+      <BrandMark size={48} />
       {error ? (
         <>
-          <Text style={{ color: colors.text, fontSize: 18, fontWeight: '700', textAlign: 'center' }}>Couldn’t sign you in</Text>
-          <Text style={{ color: colors.textMuted, fontSize: 14, marginTop: 6, textAlign: 'center' }}>{error} Request a new code and try again.</Text>
-          <View className="mt-6 w-full">
+          <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 22, fontWeight: '700', letterSpacing: -0.4, textAlign: 'center', marginTop: 20 }}>
+            Couldn’t sign you in
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: 14.5, lineHeight: 21, marginTop: 6, textAlign: 'center' }}>{error} Request a new code and try again.</Text>
+          <View style={{ marginTop: 24, alignSelf: 'stretch' }}>
             <Button onPress={() => router.replace('/sign-in')}>Back to sign in</Button>
           </View>
         </>
       ) : (
         <>
-          <ActivityIndicator color={colors.textMuted} />
-          <Text style={{ color: colors.textMuted, fontSize: 14, marginTop: 12 }}>Signing you in…</Text>
+          <ActivityIndicator color={colors.textMuted} style={{ marginTop: 24 }} />
+          <Text accessibilityLiveRegion="polite" style={{ color: colors.textMuted, fontSize: 14.5, marginTop: 12 }}>
+            Signing you in…
+          </Text>
         </>
       )}
     </View>

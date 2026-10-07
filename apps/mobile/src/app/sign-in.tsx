@@ -1,10 +1,12 @@
 import { authFormReducer, initialAuthForm, OTP_LENGTH } from '@hisab/core'
 import * as Linking from 'expo-linking'
-import { ArrowLeft } from 'lucide-react-native'
+import { ArrowLeft, Mail } from 'lucide-react-native'
 import { useEffect, useReducer, useRef, useState } from 'react'
-import { KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native'
-import { SafeAreaView } from 'react-native-safe-area-context'
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { BrandMark } from '@/components/brand'
 import { Button } from '@/components/button'
+import { Press } from '@/components/press'
 import { supabase } from '@/lib/supabase'
 import { useTheme } from '@/lib/theme'
 
@@ -14,7 +16,9 @@ const RESEND_SECONDS = 60
 export default function SignInScreen() {
   const [state, dispatch] = useReducer(authFormReducer, initialAuthForm)
   const [cooldown, setCooldown] = useState(0)
+  const [emailFocused, setEmailFocused] = useState(false)
   const { colors } = useTheme()
+  const insets = useSafeAreaInsets()
   const codeRef = useRef<TextInput>(null)
 
   useEffect(() => {
@@ -54,22 +58,24 @@ export default function SignInScreen() {
   }, [state.code, state.step, state.status, state.error])
 
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <View className="flex-1 justify-center px-6">
-          <View className="mb-10 flex-row items-center gap-2.5">
-            <View className="h-9 w-9 items-center justify-center rounded-tile bg-brand">
-              <Text style={{ color: colors.brandFg, fontWeight: '700', fontSize: 15 }}>H</Text>
-            </View>
-            <Text style={{ color: colors.text, fontWeight: '600', fontSize: 17 }}>Hisab</Text>
-          </View>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: colors.page }}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ flexGrow: 1, paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24, paddingHorizontal: 24 }}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <BrandMark size={36} />
+          <Text style={{ color: colors.text, fontWeight: '600', fontSize: 18, letterSpacing: -0.3 }}>Hisab</Text>
+        </View>
 
+        <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 32 }}>
           {state.step === 'email' ? (
             <>
-              <Text style={{ color: colors.text, fontSize: 28, fontWeight: '700', letterSpacing: -0.5 }}>Welcome</Text>
-              <Text style={{ color: colors.textMuted, fontSize: 15, marginTop: 6 }}>
-                Sign in or create an account with your email.
+              <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 28, fontWeight: '700', letterSpacing: -0.6 }}>
+                Sign in to Hisab
               </Text>
+              <Text style={{ color: colors.textMuted, fontSize: 15, marginTop: 6, lineHeight: 21 }}>New here? The same step creates your account.</Text>
+              <Text style={{ color: colors.text, fontSize: 13.5, fontWeight: '600', marginTop: 28, marginBottom: 8 }}>Email</Text>
               <TextInput
                 accessibilityLabel="Email"
                 autoFocus
@@ -81,40 +87,50 @@ export default function SignInScreen() {
                 placeholderTextColor={colors.textFaint}
                 value={state.email}
                 editable={state.status === 'idle'}
+                onFocus={() => setEmailFocused(true)}
+                onBlur={() => setEmailFocused(false)}
                 onChangeText={(email) => dispatch({ type: 'setEmail', email })}
                 onSubmitEditing={() => dispatch({ type: 'submitEmail' })}
                 returnKeyType="go"
-                className="mt-8 h-[52px] rounded-[14px] border bg-surface px-4"
-                style={{ color: colors.text, fontSize: 16, borderColor: state.error ? colors.danger : colors.border }}
+                style={{
+                  height: 52,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  paddingHorizontal: 16,
+                  backgroundColor: colors.surface,
+                  color: colors.text,
+                  fontSize: 16,
+                  borderColor: state.error ? colors.danger : emailFocused ? colors.textFaint : colors.border,
+                }}
               />
               <ErrorText message={state.error} />
-              <View className="mt-4">
-                <Button onPress={() => dispatch({ type: 'submitEmail' })} loading={state.status === 'sending'}>
-                  Continue
-                </Button>
+              <Button onPress={() => dispatch({ type: 'submitEmail' })} loading={state.status === 'sending'}>
+                Continue with email
+              </Button>
+              <View style={{ marginTop: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <Mail size={14} color={colors.textFaint} />
+                <Text style={{ color: colors.textFaint, fontSize: 13 }}>We’ll email you a 6-digit code. No password.</Text>
               </View>
-              <Text style={{ color: colors.textFaint, fontSize: 12.5, textAlign: 'center', marginTop: 20 }}>
-                We’ll email you a 6-digit code. No password needed.
-              </Text>
             </>
           ) : (
             <>
-              <Pressable
+              <Press
                 accessibilityRole="button"
                 onPress={() => dispatch({ type: 'back' })}
-                className="-ml-1 mb-6 flex-row items-center gap-1.5 self-start py-1"
+                hitSlop={10}
+                style={{ marginLeft: -2, marginBottom: 20, flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4 }}
               >
-                <ArrowLeft size={16} color={colors.textMuted} />
-                <Text style={{ color: colors.textMuted, fontSize: 13 }}>Use a different email</Text>
-              </Pressable>
-              <Text style={{ color: colors.text, fontSize: 28, fontWeight: '700', letterSpacing: -0.5 }}>
+                <ArrowLeft size={17} color={colors.textMuted} />
+                <Text style={{ color: colors.textMuted, fontSize: 14 }}>Use a different email</Text>
+              </Press>
+              <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 28, fontWeight: '700', letterSpacing: -0.6 }}>
                 Check your email
               </Text>
-              <Text style={{ color: colors.textMuted, fontSize: 15, marginTop: 6 }}>
-                Enter the code we sent to <Text style={{ color: colors.text, fontWeight: '600' }}>{state.email}</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 15, marginTop: 6, lineHeight: 21 }}>
+                Enter the code we sent to <Text style={{ color: colors.text, fontWeight: '600' }}>{state.email}</Text>, or open the link in that email on this phone.
               </Text>
 
-              <Pressable onPress={() => codeRef.current?.focus()} className="mt-8">
+              <Pressable accessibilityElementsHidden onPress={() => codeRef.current?.focus()} style={{ marginTop: 28 }}>
                 <TextInput
                   ref={codeRef}
                   accessibilityLabel="6-digit code"
@@ -128,57 +144,56 @@ export default function SignInScreen() {
                   onChangeText={(code) => dispatch({ type: 'setCode', code })}
                   style={{ position: 'absolute', opacity: 0, width: 1, height: 1 }}
                 />
-                <View className="flex-row gap-2" pointerEvents="none">
+                <View style={{ flexDirection: 'row', gap: 8 }} pointerEvents="none">
                   {Array.from({ length: OTP_LENGTH }, (_, i) => {
-                    const active = i === Math.min(state.code.length, OTP_LENGTH - 1)
+                    const active = state.status === 'idle' && i === Math.min(state.code.length, OTP_LENGTH - 1)
                     return (
                       <View
                         key={i}
-                        className="h-14 flex-1 items-center justify-center rounded-[14px] border bg-surface"
                         style={{
-                          borderColor: state.error ? colors.danger : active ? colors.textFaint : colors.border,
+                          height: 58,
+                          flex: 1,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: 14,
+                          borderWidth: active ? 1.5 : 1,
+                          backgroundColor: colors.surface,
+                          borderColor: state.error ? colors.danger : active ? colors.text : colors.border,
                         }}
                       >
-                        <Text style={{ color: colors.text, fontSize: 22, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
-                          {state.code[i] ?? ''}
-                        </Text>
+                        <Text style={{ color: colors.text, fontSize: 24, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{state.code[i] ?? ''}</Text>
                       </View>
                     )
                   })}
                 </View>
               </Pressable>
               <ErrorText message={state.error} />
-              <View className="mt-4">
-                <Button onPress={() => dispatch({ type: 'submitCode' })} loading={state.status === 'verifying'}>
-                  Verify
-                </Button>
-              </View>
-              <View className="mt-4 items-center">
+              <Button onPress={() => dispatch({ type: 'submitCode' })} loading={state.status === 'verifying'}>
+                Verify
+              </Button>
+              <View style={{ marginTop: 16, alignItems: 'center' }}>
                 {cooldown > 0 ? (
-                  <Text style={{ color: colors.textMuted, fontSize: 13, fontVariant: ['tabular-nums'] }}>
-                    Resend code in {cooldown}s
-                  </Text>
+                  <Text style={{ color: colors.textMuted, fontSize: 13.5, fontVariant: ['tabular-nums'], paddingVertical: 12 }}>Resend code in {cooldown}s</Text>
                 ) : (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => dispatch({ type: 'resend' })}
-                  >
-                    <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Resend code</Text>
-                  </Pressable>
+                  <Press accessibilityRole="button" onPress={() => dispatch({ type: 'resend' })} style={{ paddingVertical: 12, paddingHorizontal: 16 }}>
+                    <Text style={{ color: colors.text, fontSize: 13.5, fontWeight: '600' }}>Resend code</Text>
+                  </Press>
                 )}
               </View>
             </>
           )}
         </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+
+        <Text style={{ color: colors.textFaint, fontSize: 12.5, textAlign: 'center' }}>Know where your money goes — without the month-end struggle.</Text>
+      </ScrollView>
+    </KeyboardAvoidingView>
   )
 }
 
 function ErrorText({ message }: { message: string | null }) {
   const { colors } = useTheme()
   return (
-    <Text accessibilityLiveRegion="polite" style={{ color: colors.danger, fontSize: 13, marginTop: 8, minHeight: 18 }}>
+    <Text accessibilityLiveRegion="polite" style={{ color: colors.danger, fontSize: 13, marginTop: 8, marginBottom: 8, minHeight: 18 }}>
       {message ?? ''}
     </Text>
   )
