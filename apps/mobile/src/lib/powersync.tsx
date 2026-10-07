@@ -1,6 +1,6 @@
 import { AppSchema, ensureDefaultCategories, SupabaseConnector } from '@hisab/db'
 import { PowerSyncContext, useStatus } from '@powersync/react'
-import { PowerSyncDatabase } from '@powersync/react-native'
+import { PowerSyncDatabase, SyncStreamConnectionMethod } from '@powersync/react-native'
 import { createContext, use, useEffect, useMemo, type ReactNode } from 'react'
 import { useSession } from './session'
 import { supabase } from './supabase'
@@ -42,7 +42,9 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!db || !userId) return
     if (connector.syncEnabled) {
-      void db.connect(connector)
+      // WebSocket, not HTTP streaming: on Android the HTTP stream never delivers (the connection stays
+      // "connecting" forever with no error), while the WebSocket transport syncs immediately.
+      void db.connect(connector, { connectionMethod: SyncStreamConnectionMethod.WEB_SOCKET })
       // With sync, the server already has this user's categories: seed only if still empty after the first sync.
       void db.waitForFirstSync().then(() => ensureDefaultCategories(db, userId)).catch(() => {})
     } else {

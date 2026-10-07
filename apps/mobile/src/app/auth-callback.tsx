@@ -31,8 +31,8 @@ export default function AuthCallback() {
   useEffect(() => {
     if (!url || handled.current) return
     const t = tokensFrom(url)
-    if (!t) return
     handled.current = true
+    if (!t) return setError('This sign-in link is incomplete.')
     if ('error' in t) return setError(t.error)
     void supabase.auth.setSession(t).then(({ error: e }) => {
       if (e) setError('This sign-in link has expired or was already used.')
