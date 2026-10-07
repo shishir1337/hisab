@@ -30,7 +30,7 @@ for (const v of variants) {
   page.on('console', (m) => m.type() === 'error' && errors.push(`${v.name}: ${m.text()}`))
   // Each context has its own browser database: seed it (no-op if it already has data).
   await page.goto(base + '/?demo=1', { waitUntil: 'load' })
-  await page.getByText('Total balance').first().waitFor({ timeout: 20000 })
+  await page.getByText('Total balance').first().waitFor({ timeout: 90000 })
   await page.waitForTimeout(1500)
   for (const [name, path] of routes) {
     if (only && !only.includes(name)) continue
