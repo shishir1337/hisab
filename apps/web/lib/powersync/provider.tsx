@@ -1,6 +1,6 @@
 'use client'
 
-import { AppSchema, SupabaseConnector } from '@hisab/db'
+import { AppSchema, ensureDefaultCategories, SupabaseConnector } from '@hisab/db'
 import type { AbstractPowerSyncDatabase } from '@powersync/web'
 import { PowerSyncContext } from '@powersync/react'
 import { useRouter } from 'next/navigation'
@@ -52,6 +52,8 @@ export function PowerSyncProvider({ children, fallback }: { children: ReactNode;
       })
       await instance.init()
       if (disposed) return void instance.close()
+      // Default categories exist even before (or without) the first sync — same ids as the server seed.
+      await ensureDefaultCategories(instance, userId)
       if (connector.syncEnabled) void instance.connect(connector)
       setReady({ db: instance, userId })
     })()

@@ -1,11 +1,116 @@
+import { addDays, balanceSeries } from '@hisab/core'
+import { Q, type TransactionView } from '@hisab/db'
+import { useQuery } from '@powersync/react'
+import { router } from 'expo-router'
+import { Wallet } from 'lucide-react-native'
+import { useMemo } from 'react'
+import { Pressable, Text, View } from 'react-native'
+import { Button } from '@/components/button'
 import { HeroCard } from '@/components/hero-card'
+import { Money } from '@/components/money'
 import { Screen } from '@/components/screen'
 import { SyncPill } from '@/components/sync-pill'
+import { TransactionRow } from '@/components/transaction-row'
+import { useQuickLog } from '@/features/quick-log/provider'
+import { useProfile, useToday } from '@/lib/profile'
+import { useSession } from '@/lib/session'
+import { useTheme } from '@/lib/theme'
+
+const TREND_DAYS = 30
 
 export default function HomeScreen() {
+  const { currency, grouping, timeZone } = useProfile()
+  const today = useToday(timeZone)
+  const { colors } = useTheme()
+  const quickLog = useQuickLog()
+
+  const { data: accounts, isLoading } = useQuery<{ id: string }>(Q.activeAccounts)
+  const { data: totalRows } = useQuery<{ total: number }>(Q.totalBalance)
+  const { data: net } = useQuery<{ day: string; net: number }>(Q.dailyNet, [addDays(today, -TREND_DAYS)])
+  const { data: todays } = useQuery<TransactionView>(Q.transactionsBetween, [today, today])
+
+  const total = totalRows[0]?.total ?? 0
+  const series = useMemo(() => balanceSeries(total, net, today, TREND_DAYS).map((p) => p.balance), [total, net, today])
+  const spentToday = todays.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount_minor, 0)
+
   return (
-    <Screen title="Home" accessory={<SyncPill />}>
-      <HeroCard />
+    <Screen title="Home" accessory={<HeaderAccessory />}>
+      {!isLoading && accounts.length === 0 ? (
+        <FirstAccount />
+      ) : (
+        <HeroCard total={total} series={series} owedToYou={0} loansLeft={0} currency={currency} grouping={grouping} />
+      )}
+
+      <View className="mb-2 mt-6 flex-row items-baseline justify-between">
+        <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Today</Text>
+        {spentToday > 0 && (
+          <Text style={{ color: colors.textMuted, fontSize: 12.5 }}>
+            <Money minor={spentToday} currency={currency} grouping={grouping} size={12.5} weight="500" color={colors.textMuted} /> spent
+          </Text>
+        )}
+      </View>
+
+      {todays.length === 0 ? (
+        <View className="items-center rounded-card border border-border bg-surface px-6 py-8">
+          <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '600' }}>Nothing logged today</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: 3, textAlign: 'center' }}>
+            Every taka you track now saves a headache at month-end.
+          </Text>
+          {accounts.length > 0 && (
+            <View className="mt-4 w-full">
+              <Button variant="secondary" onPress={() => quickLog.open()}>
+                Log an expense
+              </Button>
+            </View>
+          )}
+        </View>
+      ) : (
+        <View className="rounded-card border border-border bg-surface px-3.5">
+          {todays.map((tx, i) => (
+            <View key={tx.id} style={i > 0 ? { borderTopWidth: 1, borderTopColor: colors.borderSubtle } : undefined}>
+              <TransactionRow tx={tx} currency={currency} grouping={grouping} onPress={() => quickLog.open({ edit: tx })} />
+            </View>
+          ))}
+        </View>
+      )}
     </Screen>
+  )
+}
+
+function HeaderAccessory() {
+  const { user } = useSession()
+  const { colors } = useTheme()
+  const initial = (user?.email ?? '?').charAt(0).toUpperCase()
+  return (
+    <View className="flex-row items-center gap-2">
+      <SyncPill />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Settings"
+        hitSlop={8}
+        onPress={() => router.push('/settings')}
+        className="h-9 w-9 items-center justify-center rounded-full bg-surface-muted"
+      >
+        <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>{initial}</Text>
+      </Pressable>
+    </View>
+  )
+}
+
+function FirstAccount() {
+  const { colors } = useTheme()
+  return (
+    <View className="rounded-hero border border-border bg-surface p-5">
+      <View className="h-10 w-10 items-center justify-center rounded-tile bg-surface-muted">
+        <Wallet size={20} color={colors.text} />
+      </View>
+      <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700', marginTop: 12 }}>Add your first account</Text>
+      <Text style={{ color: colors.textMuted, fontSize: 13.5, marginTop: 4 }}>
+        Where your money sits — cash, a bank, bKash. Enter what’s in it right now and you’re set.
+      </Text>
+      <View className="mt-4">
+        <Button onPress={() => router.push('/account')}>Add account</Button>
+      </View>
+    </View>
   )
 }

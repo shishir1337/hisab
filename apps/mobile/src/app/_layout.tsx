@@ -1,6 +1,7 @@
 import 'react-native-get-random-values'
 import '@/global.css'
 
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet'
 import { Stack } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
 import { StatusBar } from 'expo-status-bar'
@@ -10,6 +11,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { PowerSyncProvider } from '@/lib/powersync'
 import { SessionProvider, useSession } from '@/lib/session'
 import { ThemeProvider, useTheme } from '@/lib/theme'
+import { UndoProvider } from '@/lib/undo'
 
 void SplashScreen.preventAutoHideAsync()
 
@@ -20,7 +22,11 @@ export default function RootLayout() {
         <ThemeProvider>
           <SessionProvider>
             <PowerSyncProvider>
-              <RootStack />
+              <UndoProvider>
+                <BottomSheetModalProvider>
+                  <RootStack />
+                </BottomSheetModalProvider>
+              </UndoProvider>
             </PowerSyncProvider>
           </SessionProvider>
         </ThemeProvider>
@@ -44,6 +50,8 @@ function RootStack() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.page } }}>
         <Stack.Protected guard={Boolean(user)}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="settings" options={{ animation: 'slide_from_right' }} />
+          <Stack.Screen name="account" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         </Stack.Protected>
         <Stack.Protected guard={!user}>
           <Stack.Screen name="sign-in" />

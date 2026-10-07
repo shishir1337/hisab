@@ -1,4 +1,4 @@
-import { AppSchema, SupabaseConnector } from '@hisab/db'
+import { AppSchema, ensureDefaultCategories, SupabaseConnector } from '@hisab/db'
 import { PowerSyncContext } from '@powersync/react'
 import { PowerSyncDatabase } from '@powersync/react-native'
 import { createContext, use, useEffect, useMemo, type ReactNode } from 'react'
@@ -29,10 +29,12 @@ export function PowerSyncProvider({ children }: { children: ReactNode }) {
   )
 
   useEffect(() => {
-    if (!db) return
+    if (!db || !userId) return
+    // Default categories exist even before (or without) the first sync — same ids as the server seed.
+    void ensureDefaultCategories(db, userId)
     if (connector.syncEnabled) void db.connect(connector)
     return () => void db.close()
-  }, [db])
+  }, [db, userId])
 
   if (!db) return <>{children}</>
   return (

@@ -4,6 +4,7 @@ import { Home, ListOrdered, Plus, Target, Users, type LucideIcon } from 'lucide-
 import type { ComponentProps } from 'react'
 import { Pressable, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useQuickLog } from '@/features/quick-log/provider'
 import { useTheme } from '@/lib/theme'
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0]
@@ -15,17 +16,21 @@ const ICONS: Record<string, { icon: LucideIcon; label: string }> = {
   people: { icon: Users, label: 'People' },
 }
 
-/** Four tabs plus the floating + (quick log arrives in M2). Spec §7.2. */
+/** Four tabs plus the floating + that opens quick log. Spec §7.2. */
 export function TabBar({ state, navigation }: TabBarProps) {
   const { colors } = useTheme()
   const insets = useSafeAreaInsets()
+  const quickLog = useQuickLog()
 
   return (
     <View pointerEvents="box-none">
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Add transaction"
-        onPress={() => void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)}
+        onPress={() => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
+          quickLog.open()
+        }}
         className="absolute right-[18px] h-14 w-14 items-center justify-center rounded-full bg-brand"
         style={({ pressed }) => ({
           bottom: 72 + insets.bottom + 14,

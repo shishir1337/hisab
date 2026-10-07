@@ -3,7 +3,8 @@ import { z } from 'zod'
 // Mirrors the Postgres CHECK constraints (supabase/migrations/*_schema.sql) so bad input is caught
 // inline in the UI before it ever reaches the local database or the upload queue.
 
-const id = z.uuid()
+// Any 8-4-4-4-12 hex id: client UUIDv7, server gen_random_uuid, and md5-derived default ids.
+const id = z.guid()
 const isoDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expected YYYY-MM-DD')
