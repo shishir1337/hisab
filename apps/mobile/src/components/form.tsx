@@ -1,50 +1,56 @@
 import { addDays, addMonths, dayLabel } from '@hisab/core'
-import { router } from 'expo-router'
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Minus, Plus, X } from 'lucide-react-native'
-import type { ReactNode } from 'react'
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Minus, Plus } from 'lucide-react-native'
+import { useState, type ReactNode } from 'react'
+import { Switch, Text, TextInput, View, type TextInputProps } from 'react-native'
 import { useTheme } from '@/lib/theme'
+import { Press } from './press'
 
-/** Modal form scaffold: title + close, scrollable body, keyboard-aware. */
-export function FormScreen({ title, children }: { title: string; children: ReactNode }) {
-  const { colors } = useTheme()
-  const insets = useSafeAreaInsets()
-  return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: colors.page }}>
-      <ScrollView contentContainerStyle={{ paddingTop: insets.top + 8, paddingHorizontal: 18, paddingBottom: insets.bottom + 28 }} keyboardShouldPersistTaps="handled">
-        <View className="mb-3 flex-row items-center justify-between">
-          <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 22, fontWeight: '700' }}>
-            {title}
-          </Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => router.back()} className="h-10 w-10 items-center justify-center rounded-full bg-surface-muted">
-            <X size={18} color={colors.text} />
-          </Pressable>
-        </View>
-        {children}
-      </ScrollView>
-    </KeyboardAvoidingView>
-  )
-}
+export { FormScreen } from './screen'
 
-export function Label({ children, hint }: { children: string; hint?: string }) {
+/** Field height and radius shared by every input (web: h-11/12, 12–14px radius). */
+const FIELD = { height: 52, borderRadius: 14, borderWidth: 1, paddingHorizontal: 16 } as const
+
+export function Label({ children, hint, first }: { children: string; hint?: string; first?: boolean }) {
   const { colors } = useTheme()
   return (
-    <View className="mb-2 mt-5 flex-row items-baseline justify-between">
-      <Text style={{ color: colors.textMuted, fontSize: 13, fontWeight: '500' }}>{children}</Text>
-      {hint ? <Text style={{ color: colors.textFaint, fontSize: 12 }}>{hint}</Text> : null}
+    <View style={{ marginTop: first ? 8 : 22, marginBottom: 8, flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
+      <Text style={{ color: colors.text, fontSize: 13.5, fontWeight: '600' }}>{children}</Text>
+      {hint ? (
+        <Text numberOfLines={1} style={{ flexShrink: 1, color: colors.textFaint, fontSize: 12.5 }}>
+          {hint}
+        </Text>
+      ) : null}
     </View>
   )
 }
 
-export function TextField(props: { value: string; onChangeText: (v: string) => void; placeholder?: string; accessibilityLabel: string; maxLength?: number }) {
+/** Border darkens while focused, like the web inputs' focus ring. */
+function useFocusBorder() {
   const { colors } = useTheme()
+  const [focused, setFocused] = useState(false)
+  return { borderColor: focused ? colors.textFaint : colors.border, onFocus: () => setFocused(true), onBlur: () => setFocused(false) }
+}
+
+export function TextField(props: {
+  value: string
+  onChangeText: (v: string) => void
+  placeholder?: string
+  accessibilityLabel: string
+  maxLength?: number
+  keyboardType?: TextInputProps['keyboardType']
+  autoCapitalize?: TextInputProps['autoCapitalize']
+  invalid?: boolean
+}) {
+  const { colors } = useTheme()
+  const { invalid, ...rest } = props
+  const focus = useFocusBorder()
   return (
     <TextInput
-      {...props}
+      {...rest}
+      onFocus={focus.onFocus}
+      onBlur={focus.onBlur}
       placeholderTextColor={colors.textFaint}
-      className="h-[52px] rounded-[14px] border border-border bg-surface px-4"
-      style={{ color: colors.text, fontSize: 16 }}
+      style={{ ...FIELD, borderColor: invalid ? colors.danger : focus.borderColor, backgroundColor: colors.surface, color: colors.text, fontSize: 16 }}
     />
   )
 }
@@ -52,17 +58,20 @@ export function TextField(props: { value: string; onChangeText: (v: string) => v
 /** Money input with the ISO code as a prefix; value is the raw typed string (parse with parseAmount). */
 export function AmountField({ value, onChange, currency, accessibilityLabel }: { value: string; onChange: (v: string) => void; currency: string; accessibilityLabel: string }) {
   const { colors } = useTheme()
+  const focus = useFocusBorder()
   return (
-    <View className="h-[52px] flex-row items-center rounded-[14px] border border-border bg-surface px-4">
-      <Text style={{ color: colors.textFaint, fontSize: 13, fontWeight: '500', marginRight: 8 }}>{currency}</Text>
+    <View style={{ ...FIELD, borderColor: focus.borderColor, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center' }}>
+      <Text style={{ color: colors.textFaint, fontSize: 13, fontWeight: '600', letterSpacing: 0.3, marginRight: 10 }}>{currency}</Text>
       <TextInput
         accessibilityLabel={accessibilityLabel}
         value={value}
+        onFocus={focus.onFocus}
+        onBlur={focus.onBlur}
         onChangeText={(v) => onChange(v.replace(/[^\d.,]/g, ''))}
         placeholder="0"
         placeholderTextColor={colors.textFaint}
         keyboardType="decimal-pad"
-        style={{ flex: 1, color: colors.text, fontSize: 18, fontWeight: '600', fontVariant: ['tabular-nums'] }}
+        style={{ flex: 1, height: '100%', color: colors.text, fontSize: 18, fontWeight: '600', fontVariant: ['tabular-nums'] }}
       />
     </View>
   )
@@ -73,65 +82,124 @@ export function DateStepper({ value, onChange, today }: { value: string; onChang
   const { colors } = useTheme()
   const label = value === today || Math.abs(daysApart(value, today)) <= 1 ? dayLabel(value, today) : formatDay(value)
   return (
-    <View className="h-[52px] flex-row items-center justify-between rounded-[14px] border border-border bg-surface px-1.5">
-      <View className="flex-row">
+    <View style={{ ...FIELD, paddingHorizontal: 4, borderColor: colors.border, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <View style={{ flexDirection: 'row' }}>
         <StepIcon label="Previous month" onPress={() => onChange(addMonths(value, -1))}>
-          <ChevronsLeft size={18} color={colors.textMuted} />
+          <ChevronsLeft size={18} color={colors.textFaint} />
         </StepIcon>
         <StepIcon label="Previous day" onPress={() => onChange(addDays(value, -1))}>
-          <ChevronLeft size={18} color={colors.text} />
+          <ChevronLeft size={19} color={colors.text} />
         </StepIcon>
       </View>
-      <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>{label}</Text>
-      <View className="flex-row">
+      <Text accessibilityLiveRegion="polite" style={{ color: colors.text, fontSize: 15, fontWeight: '600', fontVariant: ['tabular-nums'] }}>
+        {label}
+      </Text>
+      <View style={{ flexDirection: 'row' }}>
         <StepIcon label="Next day" onPress={() => onChange(addDays(value, 1))}>
-          <ChevronRight size={18} color={colors.text} />
+          <ChevronRight size={19} color={colors.text} />
         </StepIcon>
         <StepIcon label="Next month" onPress={() => onChange(addMonths(value, 1))}>
-          <ChevronsRight size={18} color={colors.textMuted} />
+          <ChevronsRight size={18} color={colors.textFaint} />
         </StepIcon>
       </View>
     </View>
   )
 }
 
-export function NumberStepper({ value, onChange, min = 0, max = 999, suffix }: { value: number; onChange: (n: number) => void; min?: number; max?: number; suffix?: string }) {
+export function NumberStepper({
+  value,
+  onChange,
+  min = 0,
+  max = 999,
+  suffix,
+  accessibilityLabel = 'Value',
+}: {
+  value: number
+  onChange: (n: number) => void
+  min?: number
+  max?: number
+  suffix?: string
+  accessibilityLabel?: string
+}) {
   const { colors } = useTheme()
   return (
-    <View className="h-[52px] flex-row items-center justify-between rounded-[14px] border border-border bg-surface px-1.5">
-      <StepIcon label="Decrease" onPress={() => onChange(Math.max(min, value - 1))}>
+    <View style={{ ...FIELD, paddingHorizontal: 4, borderColor: colors.border, backgroundColor: colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+      <StepIcon label="Decrease" disabled={value <= min} onPress={() => onChange(Math.max(min, value - 1))}>
         <Minus size={18} color={value <= min ? colors.textFaint : colors.text} />
       </StepIcon>
-      <TextInput
-        accessibilityLabel="Value"
-        keyboardType="number-pad"
-        value={String(value)}
-        onChangeText={(t) => {
-          const n = Number(t.replace(/\D/g, ''))
-          if (Number.isFinite(n)) onChange(Math.min(max, Math.max(min, n)))
-        }}
-        style={{ color: colors.text, fontSize: 17, fontWeight: '700', textAlign: 'center', minWidth: 60, fontVariant: ['tabular-nums'] }}
-      />
-      {suffix ? <Text style={{ color: colors.textFaint, fontSize: 13, position: 'absolute', right: 56 }}>{suffix}</Text> : null}
-      <StepIcon label="Increase" onPress={() => onChange(Math.min(max, value + 1))}>
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: 6 }}>
+        <TextInput
+          accessibilityLabel={accessibilityLabel}
+          keyboardType="number-pad"
+          value={String(value)}
+          selectTextOnFocus
+          onChangeText={(t) => {
+            const n = Number(t.replace(/\D/g, ''))
+            if (Number.isFinite(n)) onChange(Math.min(max, Math.max(min, n)))
+          }}
+          style={{ color: colors.text, fontSize: 17, fontWeight: '700', textAlign: 'center', minWidth: 36, padding: 0, fontVariant: ['tabular-nums'] }}
+        />
+        {suffix ? <Text style={{ color: colors.textMuted, fontSize: 14 }}>{suffix}</Text> : null}
+      </View>
+      <StepIcon label="Increase" disabled={value >= max} onPress={() => onChange(Math.min(max, value + 1))}>
         <Plus size={18} color={value >= max ? colors.textFaint : colors.text} />
       </StepIcon>
     </View>
   )
 }
 
-function StepIcon({ label, onPress, children }: { label: string; onPress: () => void; children: ReactNode }) {
+function StepIcon({ label, onPress, children, disabled }: { label: string; onPress: () => void; children: ReactNode; disabled?: boolean }) {
+  const { colors } = useTheme()
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} hitSlop={4} className="h-11 w-11 items-center justify-center rounded-[11px]">
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      haptic="selection"
+      onPress={onPress}
+      hitSlop={2}
+      feedback="none"
+      pressedStyle={{ backgroundColor: colors.surfaceMuted }}
+      style={{ width: 44, height: 44, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}
+    >
       {children}
-    </Pressable>
+    </Press>
+  )
+}
+
+/** Label + help on the left, a switch on the right — inside a card. */
+export function SwitchRow({ label, description, value, onValueChange }: { label: string; description?: string; value: boolean; onValueChange: (v: boolean) => void }) {
+  const { colors, scheme } = useTheme()
+  return (
+    <Press
+      accessibilityRole="switch"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: value }}
+      onPress={() => onValueChange(!value)}
+      feedback="none"
+      style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 56, paddingVertical: 12 }}
+    >
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: colors.text, fontSize: 15, fontWeight: '500' }}>{label}</Text>
+        {description ? <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 2, lineHeight: 17 }}>{description}</Text> : null}
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        trackColor={{ true: colors.brand, false: colors.border }}
+        thumbColor={value ? colors.brandFg : scheme === 'dark' ? colors.textMuted : '#FFFFFF'}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      />
+    </Press>
   )
 }
 
 export function ErrorLine({ message }: { message: string | null }) {
   const { colors } = useTheme()
   return (
-    <Text accessibilityLiveRegion="polite" style={{ color: colors.danger, fontSize: 13, marginTop: 12, marginBottom: 4, minHeight: 18 }}>
+    <Text accessibilityLiveRegion="polite" style={{ color: colors.danger, fontSize: 13, marginTop: 14, marginBottom: 6, minHeight: 18 }}>
       {message ?? ''}
     </Text>
   )
@@ -140,6 +208,15 @@ export function ErrorLine({ message }: { message: string | null }) {
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 export function formatDay(day: string): string {
   return `${Number(day.slice(8, 10))} ${MONTHS[Number(day.slice(5, 7)) - 1]} ${day.slice(0, 4)}`
+}
+/** "12 Oct" — drops the year when it's the current one. */
+export function shortDay(day: string, today: string): string {
+  const d = `${Number(day.slice(8, 10))} ${MONTHS[Number(day.slice(5, 7)) - 1]}`
+  return day.slice(0, 4) === today.slice(0, 4) ? d : `${d} ${day.slice(0, 4)}`
+}
+/** "Mar 2027" */
+export function monthYear(day: string): string {
+  return `${MONTHS[Number(day.slice(5, 7)) - 1]} ${day.slice(0, 4)}`
 }
 function daysApart(a: string, b: string) {
   return (Date.parse(a) - Date.parse(b)) / 86_400_000

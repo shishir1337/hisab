@@ -1,8 +1,9 @@
 import type { KeypadKey } from '@hisab/core'
 import * as Haptics from 'expo-haptics'
 import { Delete } from 'lucide-react-native'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 import { useTheme } from '@/lib/theme'
+import { Press } from './press'
 
 const ROWS: KeypadKey[][] = [
   ['1', '2', '3'],
@@ -15,28 +16,37 @@ const ROWS: KeypadKey[][] = [
 export function Keypad({ onKey }: { onKey: (k: KeypadKey) => void }) {
   const { colors } = useTheme()
   return (
-    <View className="gap-1.5">
+    <View style={{ gap: 6 }}>
       {ROWS.map((row, i) => (
-        <View key={i} className="flex-row gap-1.5">
+        <View key={i} style={{ flexDirection: 'row', gap: 6 }}>
           {row.map((k) => (
-            <Pressable
+            <Press
               key={k}
               accessibilityRole="button"
               accessibilityLabel={k === 'back' ? 'Delete' : k === '.' ? 'Decimal point' : k}
+              accessibilityHint={k === 'back' ? 'Long-press to clear' : undefined}
               onPress={() => {
                 void Haptics.selectionAsync()
                 onKey(k)
               }}
-              onLongPress={k === 'back' ? () => onKey('clear') : undefined}
-              className="h-[50px] flex-1 items-center justify-center rounded-[13px]"
-              style={({ pressed }) => ({ backgroundColor: pressed ? colors.border : colors.surfaceMuted })}
+              onLongPress={
+                k === 'back'
+                  ? () => {
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+                      onKey('clear')
+                    }
+                  : undefined
+              }
+              feedback="none"
+              pressedStyle={{ backgroundColor: colors.border, transform: [{ scale: 0.98 }] }}
+              style={{ height: 52, flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: colors.surfaceMuted }}
             >
               {k === 'back' ? (
                 <Delete size={22} color={colors.text} strokeWidth={1.8} />
               ) : (
-                <Text style={{ color: colors.text, fontSize: 22, fontWeight: '500' }}>{k}</Text>
+                <Text style={{ color: colors.text, fontSize: 23, fontWeight: '500', fontVariant: ['tabular-nums'] }}>{k}</Text>
               )}
-            </Pressable>
+            </Press>
           ))}
         </View>
       ))}

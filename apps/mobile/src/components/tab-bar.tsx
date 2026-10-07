@@ -6,6 +6,7 @@ import { Pressable, Text, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useQuickLog } from '@/features/quick-log/provider'
 import { useTheme } from '@/lib/theme'
+import { Press } from './press'
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0]
 
@@ -16,38 +17,52 @@ const ICONS: Record<string, { icon: LucideIcon; label: string }> = {
   people: { icon: Users, label: 'People' },
 }
 
+/** Height of the tab row above the system navigation inset. */
+export const TAB_BAR_HEIGHT = 64
+
 /** Four tabs plus the floating + that opens quick log. Spec §7.2. */
 export function TabBar({ state, navigation }: TabBarProps) {
-  const { colors } = useTheme()
+  const { colors, scheme } = useTheme()
   const insets = useSafeAreaInsets()
   const quickLog = useQuickLog()
 
   return (
     <View pointerEvents="box-none">
-      <Pressable
+      <Press
         accessibilityRole="button"
         accessibilityLabel="Add transaction"
-        onPress={() => {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)
-          quickLog.open()
-        }}
-        className="absolute right-[18px] h-14 w-14 items-center justify-center rounded-full bg-brand"
-        style={({ pressed }) => ({
-          bottom: 72 + insets.bottom + 14,
-          transform: [{ scale: pressed ? 0.94 : 1 }],
+        haptic="light"
+        feedback="scale"
+        onPress={() => quickLog.open()}
+        style={{
+          position: 'absolute',
+          right: 18,
+          bottom: TAB_BAR_HEIGHT + insets.bottom + 16,
+          width: 58,
+          height: 58,
+          borderRadius: 29,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.brand,
           shadowColor: '#000',
-          shadowOpacity: 0.25,
-          shadowRadius: 12,
+          shadowOpacity: scheme === 'dark' ? 0.5 : 0.22,
+          shadowRadius: 14,
           shadowOffset: { width: 0, height: 8 },
           elevation: 8,
-        })}
+        }}
       >
-        <Plus color={colors.brandFg} size={26} strokeWidth={2} />
-      </Pressable>
+        <Plus color={colors.brandFg} size={26} strokeWidth={2.2} />
+      </Press>
 
       <View
-        className="flex-row border-t border-border bg-page"
-        style={{ paddingBottom: insets.bottom, height: 64 + insets.bottom }}
+        style={{
+          flexDirection: 'row',
+          backgroundColor: colors.page,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          paddingBottom: insets.bottom,
+          height: TAB_BAR_HEIGHT + insets.bottom,
+        }}
       >
         {state.routes.map((route, index) => {
           const meta = ICONS[route.name]
@@ -61,6 +76,7 @@ export function TabBar({ state, navigation }: TabBarProps) {
               accessibilityRole="tab"
               accessibilityState={{ selected: focused }}
               accessibilityLabel={meta.label}
+              android_ripple={{ color: colors.border, borderless: true, radius: 40 }}
               onPress={() => {
                 const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true })
                 if (!focused && !event.defaultPrevented) {
@@ -68,10 +84,22 @@ export function TabBar({ state, navigation }: TabBarProps) {
                   navigation.navigate(route.name, route.params)
                 }
               }}
-              className="flex-1 items-center justify-center gap-1"
+              style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 }}
             >
-              <Icon color={color} size={22} strokeWidth={focused ? 2.2 : 1.8} />
-              <Text style={{ color, fontSize: 10.5, fontWeight: focused ? '600' : '500' }}>{meta.label}</Text>
+              {/* Pill behind the active icon: Android's native tab language, in ink instead of a hue. */}
+              <View
+                style={{
+                  width: 56,
+                  height: 30,
+                  borderRadius: 15,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  backgroundColor: focused ? (scheme === 'dark' ? colors.surfaceMuted : colors.border) : 'transparent',
+                }}
+              >
+                <Icon color={color} size={21} strokeWidth={focused ? 2.2 : 1.8} />
+              </View>
+              <Text style={{ color, fontSize: 11, fontWeight: focused ? '600' : '500', letterSpacing: 0.1 }}>{meta.label}</Text>
             </Pressable>
           )
         })}

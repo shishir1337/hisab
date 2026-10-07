@@ -4,59 +4,80 @@ import { usePowerSync } from '@powersync/react'
 import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
 import { Check } from 'lucide-react-native'
-import { useRef } from 'react'
-import { Pressable, ScrollView, Text, View } from 'react-native'
+import { useRef, useState } from 'react'
+import { ActivityIndicator, Text, View } from 'react-native'
 import type { DueItem } from '@/features/plan/use-due'
 import { useProfile } from '@/lib/profile'
 import { useTheme } from '@/lib/theme'
 import { useToast } from '@/lib/undo'
+import { shortDay } from './form'
+import { IconTile } from './icon-tile'
 import { Money } from './money'
+import { Press } from './press'
+import { Divider, SectionHeader } from './screen'
 
-/** Home "Due soon" strip (spec §7.3): ✓ records it, tapping the card opens it to adjust or skip. */
+const MAX_ROWS = 4
+
+/** Home "Due soon" (spec §7.3, same list as web): ✓ records it, tapping the row opens it to adjust or skip. */
 export function DueStrip({ items, today }: { items: DueItem[]; today: string }) {
   const { colors } = useTheme()
   if (items.length === 0) return null
+  const shown = items.slice(0, MAX_ROWS)
+  const more = items.length - shown.length
   return (
-    <View className="mt-6">
-      <View className="mb-2 flex-row items-baseline justify-between">
-        <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>Due soon</Text>
-        <Pressable accessibilityRole="button" hitSlop={10} onPress={() => router.push('/plan')}>
-          <Text style={{ color: colors.textMuted, fontSize: 12.5 }}>See all</Text>
-        </Pressable>
-      </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingRight: 18 }} style={{ marginRight: -18 }}>
-        {items.map((item) => (
-          <DueCard key={item.key} item={item} today={today} />
+    <View>
+      <SectionHeader title="Due soon" action="See all" onAction={() => router.navigate('/plan')} />
+      <View style={{ borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 14 }}>
+        {shown.map((item, i) => (
+          <View key={item.key}>
+            {i > 0 && <Divider inset={52} />}
+            <DueRow item={item} today={today} />
+          </View>
         ))}
-      </ScrollView>
+        {more > 0 && (
+          <>
+            <Divider />
+            <Press accessibilityRole="button" onPress={() => router.navigate('/plan')} style={{ height: 48, justifyContent: 'center' }}>
+              <Text style={{ color: colors.textMuted, fontSize: 13.5, fontWeight: '500' }}>
+                {more} more due · <Text style={{ color: colors.text, fontWeight: '600' }}>Open Plan</Text>
+              </Text>
+            </Press>
+          </>
+        )}
+      </View>
     </View>
   )
 }
 
-function whenLabel(date: string, today: string, overdue: boolean): string {
+/** Today · Tomorrow · In 3 days · 12 Oct — or "Overdue · 4 days". */
+export function dueLabel(date: string, today: string, overdue: boolean): string {
   const d = daysBetween(today, date)
-  if (overdue) return `overdue ${-d}d`
-  if (d === 0) return 'today'
-  if (d === 1) return 'tomorrow'
-  return `in ${d} days`
+  if (overdue || d < 0) return d === -1 ? 'Overdue · since yesterday' : `Overdue · ${-d} days`
+  if (d === 0) return 'Today'
+  if (d === 1) return 'Tomorrow'
+  if (d < 7) return `In ${d} days`
+  return shortDay(date, today)
 }
 
-function DueCard({ item, today }: { item: DueItem; today: string }) {
+function DueRow({ item, today }: { item: DueItem; today: string }) {
   const { colors } = useTheme()
   const db = usePowerSync()
   const { userId, currency, grouping } = useProfile()
   const toast = useToast()
   const busy = useRef(false)
+  const [saving, setSaving] = useState(false)
 
   const title = item.kind === 'emi' ? item.loan.name : item.rule.note || item.rule.category_name || (item.rule.type === 'transfer' ? 'Transfer' : 'Recurring')
-  const icon = item.kind === 'emi' ? '🏦' : (item.rule.category_icon ?? '🔁')
   const amount = item.kind === 'emi' ? item.loan.emi_amount_minor : item.rule.amount_minor
   const positive = item.kind === 'recurring' && item.rule.type === 'income'
   const canQuickRecord = item.kind === 'recurring' || Boolean(item.loan.default_account_id)
+  const when = dueLabel(item.date, today, item.overdue)
+  const meta = item.kind === 'emi' ? `${when} · EMI ${item.progress.paid + 1} of ${item.loan.total_installments}` : when
 
   const record = async () => {
     if (busy.current) return
     busy.current = true
+    setSaving(true)
     try {
       if (item.kind === 'recurring') {
         const r = await postOccurrence(db, userId, item.rule, item.date, { occurred_on: item.date > today ? today : item.date })
@@ -70,6 +91,7 @@ function DueCard({ item, today }: { item: DueItem; today: string }) {
       toast({ message: e instanceof Error ? e.message : 'Couldn’t record it' })
     } finally {
       busy.current = false
+      setSaving(false)
     }
   }
 
@@ -77,48 +99,59 @@ function DueCard({ item, today }: { item: DueItem; today: string }) {
     router.push(item.kind === 'emi' ? { pathname: '/loan', params: { id: item.loan.id } } : { pathname: '/due', params: { rule: item.rule.id, date: item.date } })
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${title}, ${whenLabel(item.date, today, item.overdue)}`}
-      onPress={open}
-      className="w-[168px] rounded-card border border-border bg-surface p-3"
-    >
-      <View className="flex-row items-start justify-between">
-        <Text numberOfLines={1} style={{ flex: 1, color: item.overdue ? colors.warning : colors.textMuted, fontSize: 11.5, fontWeight: item.overdue ? '600' : '500' }}>
-          {item.overdue ? '● ' : ''}
-          {icon} {title}
-        </Text>
-      </View>
-      <View className="mt-1.5 flex-row items-end justify-between">
-        <View className="flex-1">
-          <Money minor={amount} currency={currency} grouping={grouping} size={15} weight="700" color={positive ? colors.positive : colors.text} />
-          <Text style={{ color: colors.textFaint, fontSize: 11, marginTop: 2 }}>
-            {item.kind === 'emi' ? `${item.progress.paid} of ${item.loan.total_installments} · ${whenLabel(item.date, today, item.overdue)}` : whenLabel(item.date, today, item.overdue)}
+    <View style={{ flexDirection: 'row', alignItems: 'center', minHeight: 64 }}>
+      <Press
+        accessibilityRole="button"
+        accessibilityLabel={`${title}, ${meta}`}
+        accessibilityHint={item.kind === 'emi' ? 'Opens the loan' : 'Opens it to change the amount or skip'}
+        onPress={open}
+        style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingVertical: 12 }}
+      >
+        <IconTile icon={item.kind === 'emi' ? '🏦' : (item.rule.category_icon ?? '🔁')} tint={item.kind === 'emi' ? 'slate' : item.rule.category_color} size={40} />
+        <View style={{ flex: 1, marginLeft: 12, marginRight: 10 }}>
+          <Text numberOfLines={1} style={{ color: colors.text, fontSize: 15, fontWeight: '500', letterSpacing: -0.1 }}>
+            {title}
+          </Text>
+          <Text numberOfLines={1} style={{ color: item.overdue ? colors.danger : colors.textFaint, fontSize: 12.5, marginTop: 2, fontWeight: item.overdue ? '600' : '400' }}>
+            {meta}
           </Text>
         </View>
+        <Money minor={amount} currency={currency} grouping={grouping} hideCode size={15} weight="600" color={positive ? colors.positive : colors.text} />
+      </Press>
+      {/* Fixed-width action column so amounts line up whether or not a row can be recorded in one tap. */}
+      <View style={{ width: 52, alignItems: 'flex-end' }}>
         {canQuickRecord && (
-          <Pressable
+          <Press
             accessibilityRole="button"
-            accessibilityLabel={item.kind === 'emi' ? 'Mark EMI paid' : 'Record'}
-            hitSlop={8}
+            accessibilityLabel={item.kind === 'emi' ? `Mark ${title} EMI paid` : `Record ${title}`}
+            hitSlop={6}
+            feedback="scale"
+            disabled={saving}
             onPress={() => void record()}
-            className="h-9 w-9 items-center justify-center rounded-full bg-brand"
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: 19,
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderWidth: 1,
+              borderColor: colors.border,
+              backgroundColor: colors.surface,
+            }}
           >
-            <Check size={17} color={colors.brandFg} strokeWidth={2.4} />
-          </Pressable>
+            {saving ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Check size={18} color={colors.text} strokeWidth={2.4} />}
+          </Press>
         )}
       </View>
-      {item.kind === 'emi' && <ProgressBar ratio={item.progress.paid / item.loan.total_installments} />}
-    </Pressable>
-  )
-}
-
-export function ProgressBar({ ratio, color }: { ratio: number; color?: string }) {
-  const { colors } = useTheme()
-  return (
-    <View className="mt-2 h-1 overflow-hidden rounded-full" style={{ backgroundColor: colors.surfaceMuted }}>
-      <View style={{ width: `${Math.min(100, Math.max(0, ratio * 100))}%`, height: '100%', backgroundColor: color ?? colors.brand, borderRadius: 2 }} />
     </View>
   )
 }
 
+export function ProgressBar({ ratio, color, height = 6 }: { ratio: number; color?: string; height?: number }) {
+  const { colors } = useTheme()
+  return (
+    <View style={{ marginTop: 10, height, overflow: 'hidden', borderRadius: height / 2, backgroundColor: colors.surfaceMuted }}>
+      <View style={{ width: `${Math.min(100, Math.max(0, ratio * 100))}%`, height: '100%', backgroundColor: color ?? colors.brand, borderRadius: height / 2 }} />
+    </View>
+  )
+}

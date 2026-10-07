@@ -1,14 +1,17 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { Bell } from 'lucide-react-native'
+import { Bell, X } from 'lucide-react-native'
 import { useEffect, useState } from 'react'
-import { AppState, Linking, Pressable, Text, View } from 'react-native'
+import { AppState, Linking, Text, View } from 'react-native'
 import { getPermission, requestPermission, type PermissionState } from '@/lib/notifications'
 import { useTheme } from '@/lib/theme'
-import { Button } from './button'
+import { Press } from './press'
 
 const DISMISS_KEY = 'hisab.remindersCard.dismissed'
 
-/** Asks for notification permission at a moment that makes sense (not on first launch). */
+/**
+ * Asks for notification permission at a moment that makes sense (not on first launch). A quiet one-line
+ * prompt below the day's entries — it should never push what's due off the screen.
+ */
 export function RemindersCard() {
   const { colors } = useTheme()
   const [state, setState] = useState<PermissionState | null>(null)
@@ -26,38 +29,44 @@ export function RemindersCard() {
   }, [])
 
   if (dismissed || state === null || state === 'granted') return null
+  const enable = async () => {
+    if (state === 'denied') await Linking.openSettings()
+    else setState(await requestPermission())
+  }
   return (
-    <View className="mt-4 flex-row items-start gap-3 rounded-card border border-border bg-surface p-4">
-      <View className="h-9 w-9 items-center justify-center rounded-tile bg-surface-muted">
-        <Bell size={18} color={colors.text} />
+    <View style={{ marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingLeft: 14, paddingRight: 6, paddingVertical: 10 }}>
+      <View style={{ width: 34, height: 34, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted }}>
+        <Bell size={16} color={colors.textMuted} />
       </View>
-      <View className="flex-1">
-        <Text style={{ color: colors.text, fontSize: 14.5, fontWeight: '600' }}>Turn on reminders</Text>
-        <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 2 }}>
-          EMI due dates, money people owe you, and a gentle evening nudge to log your day.
+      <View style={{ flex: 1 }}>
+        <Text style={{ color: colors.text, fontSize: 14, fontWeight: '600' }}>Turn on reminders</Text>
+        <Text numberOfLines={1} style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 1 }}>
+          Due dates and money owed to you
         </Text>
-        <View className="mt-3 flex-row items-center gap-3">
-          <Button
-            variant="secondary"
-            onPress={async () => {
-              if (state === 'denied') await Linking.openSettings()
-              else setState(await requestPermission())
-            }}
-          >
-            {state === 'denied' ? 'Open settings' : 'Turn on'}
-          </Button>
-          <Pressable
-            accessibilityRole="button"
-            hitSlop={10}
-            onPress={() => {
-              setDismissed(true)
-              void AsyncStorage.setItem(DISMISS_KEY, '1')
-            }}
-          >
-            <Text style={{ color: colors.textMuted, fontSize: 13 }}>Not now</Text>
-          </Pressable>
-        </View>
       </View>
+      <Press
+        accessibilityRole="button"
+        accessibilityLabel={state === 'denied' ? 'Open notification settings' : 'Turn on reminders'}
+        haptic="selection"
+        feedback="scale"
+        onPress={() => void enable()}
+        hitSlop={6}
+        style={{ height: 34, paddingHorizontal: 14, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand }}
+      >
+        <Text style={{ color: colors.brandFg, fontSize: 13, fontWeight: '600' }}>Turn on</Text>
+      </Press>
+      <Press
+        accessibilityRole="button"
+        accessibilityLabel="Not now"
+        hitSlop={4}
+        onPress={() => {
+          setDismissed(true)
+          void AsyncStorage.setItem(DISMISS_KEY, '1')
+        }}
+        style={{ width: 36, height: 36, alignItems: 'center', justifyContent: 'center' }}
+      >
+        <X size={16} color={colors.textFaint} />
+      </Press>
     </View>
   )
 }

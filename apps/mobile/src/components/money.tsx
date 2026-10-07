@@ -23,8 +23,13 @@ export function Money({ minor, currency, size, weight = '600', color, hideCode, 
   const f = formatMoney(minor, currency, opts)
   if (hidden && !reveal) {
     return (
-      <Text accessibilityLabel="Amount hidden" className={className} style={{ fontSize: size, fontWeight: weight, color, letterSpacing: 1 }}>
-        {hideCode ? '' : `${f.code} `}••••
+      <Text accessibilityLabel="Amount hidden" className={className} style={{ fontSize: size, fontWeight: weight, color, letterSpacing: size * 0.06 }}>
+        {!hideCode && (
+          <Text style={{ fontSize: size * scale, fontWeight: codeWeight, opacity: codeOpacity, letterSpacing: 0.3 }}>
+            {f.code}{' '}
+          </Text>
+        )}
+        ••••
       </Text>
     )
   }
