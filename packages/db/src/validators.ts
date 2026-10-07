@@ -137,3 +137,18 @@ export const loanInput = z
     message: 'More EMIs paid than the loan has',
   })
 export type LoanInput = z.input<typeof loanInput>
+
+export const lendingInput = z
+  .object({
+    party_id: id,
+    direction: z.enum(['lent', 'borrowed']),
+    principal_minor: amount,
+    started_on: isoDate,
+    due_on: isoDate.nullish(),
+    reminder_interval_days: z.number().int().min(1).max(60).nullish(),
+    note: z.string().max(500).nullish(),
+    /** Account the money left (lent) or arrived in (borrowed). null = happened before Hisab: no transaction. */
+    account_id: id.nullable(),
+  })
+  .refine((l) => !l.due_on || l.due_on >= l.started_on, { path: ['due_on'], message: 'Due date is before the start date' })
+export type LendingInput = z.input<typeof lendingInput>

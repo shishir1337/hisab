@@ -1,3 +1,4 @@
+import { toE164 } from '@hisab/core'
 import type { z } from 'zod'
 import type { Executor } from './executor'
 import { newId } from './ids'
@@ -17,7 +18,7 @@ export class ValidationError extends Error {
   }
 }
 
-function parse<S extends z.ZodType>(schema: S, input: unknown): z.infer<S> {
+export function parse<S extends z.ZodType>(schema: S, input: unknown): z.infer<S> {
   const r = schema.safeParse(input)
   if (!r.success) throw new ValidationError(r.error.issues)
   return r.data
@@ -111,8 +112,14 @@ export async function archiveAccount(ex: Executor, id: string, archived: boolean
   await ex.execute('update accounts set archived_at = ?, updated_at = ? where id = ?', [archived ? ts : null, ts, id])
 }
 
+/** Accepts local formats ("01712-345678") and stores E.164; an unrecognizable number is a validation error. */
+export function normalizePartyInput<T extends { phone?: string | null }>(input: T): T {
+  if (!input.phone || !input.phone.trim()) return { ...input, phone: null }
+  return { ...input, phone: toE164(input.phone) ?? input.phone }
+}
+
 export async function createParty(ex: Executor, userId: string, input: z.input<typeof partyInput>): Promise<string> {
-  const p: PartyInput = parse(partyInput, input)
+  const p: PartyInput = parse(partyInput, normalizePartyInput(input))
   const id = newId()
   const ts = now()
   await ex.execute(
