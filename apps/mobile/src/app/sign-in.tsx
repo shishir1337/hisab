@@ -1,4 +1,5 @@
 import { authFormReducer, initialAuthForm, OTP_LENGTH } from '@hisab/core'
+import * as Linking from 'expo-linking'
 import { ArrowLeft } from 'lucide-react-native'
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View } from 'react-native'
@@ -18,7 +19,7 @@ export default function SignInScreen() {
 
   useEffect(() => {
     if (state.status === 'sending') {
-      supabase.auth.signInWithOtp({ email: state.email, options: { shouldCreateUser: true } }).then(({ error }) => {
+      supabase.auth.signInWithOtp({ email: state.email, options: { shouldCreateUser: true, emailRedirectTo: Linking.createURL('auth-callback') } }).then(({ error }) => {
         if (error) dispatch({ type: 'sendFailed', error: friendlyError(error.message) })
         else {
           dispatch({ type: 'sent' })

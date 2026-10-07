@@ -69,6 +69,8 @@ function RootStack() {
         <Stack.Protected guard={!user}>
           <Stack.Screen name="sign-in" />
         </Stack.Protected>
+        {/* The email's sign-in link opens here, signed in or not. */}
+        <Stack.Screen name="auth-callback" options={{ animation: 'fade' }} />
       </Stack>
     </>
   )
