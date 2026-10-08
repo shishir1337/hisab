@@ -641,6 +641,257 @@ html[data-amounts-swap] .hero-card .money {
   }
 }
 
+/* ───────────── Sign-in ───────────── */
+
+/* The card settles in once; each step slides in when the step changes. */
+@keyframes si-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+}
+.si-card-in {
+  animation: si-card-in 520ms var(--ease-spring-soft) 60ms both;
+}
+.si-rise {
+  animation: page-in 480ms var(--ease-out) both;
+}
+@keyframes si-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(10px);
+  }
+}
+.si-step-in {
+  animation: si-step-in var(--dur-slow) var(--ease-out) both;
+}
+.si-step-back {
+  animation: si-step-back var(--dur-slow) var(--ease-out) both;
+}
+@keyframes si-step-back {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+}
+
+/* Code boxes: each digit pops in, the active box carries a blinking caret. */
+@keyframes si-digit-pop {
+  from {
+    opacity: 0;
+    transform: translateY(0.25em) scale(0.6);
+  }
+}
+.si-digit {
+  display: inline-block;
+  animation: si-digit-pop var(--dur-slow) var(--ease-spring);
+}
+@keyframes si-caret-blink {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0;
+  }
+}
+.si-caret {
+  width: 2px;
+  height: 24px;
+  border-radius: 2px;
+  background: var(--text);
+  animation: si-caret-blink 1.05s step-end infinite;
+}
+@keyframes si-verifying {
+  50% {
+    opacity: 0.45;
+  }
+}
+.si-verifying > * {
+  animation: si-verifying 1s var(--ease-in-out) infinite;
+}
+.si-verifying > :nth-child(2) { animation-delay: 80ms; }
+.si-verifying > :nth-child(3) { animation-delay: 160ms; }
+.si-verifying > :nth-child(4) { animation-delay: 240ms; }
+.si-verifying > :nth-child(5) { animation-delay: 320ms; }
+.si-verifying > :nth-child(6) { animation-delay: 400ms; }
+
+/* Brand panel: an ink slab with a soft light falling from the top-left and a faint dot grid. */
+.si-panel {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  color: #fff;
+  background: radial-gradient(120% 90% at 0% 0%, var(--hero-from) 0%, var(--hero-to) 70%);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.08),
+    0 24px 48px -24px rgb(0 0 0 / 0.45);
+}
+.dark .si-panel {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.03), transparent 40%),
+    radial-gradient(120% 90% at 0% 0%, #34373e 0%, #1c1d21 55%, #141517 100%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 0 0 1px rgb(255 255 255 / 0.06);
+}
+.si-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: radial-gradient(rgb(255 255 255 / 0.09) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(70% 60% at 50% 45%, #000 0%, transparent 100%);
+}
+.si-panel::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  width: 520px;
+  height: 520px;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(255 255 255 / 0.07), transparent);
+}
+/* Glass surfaces inside the ink panel. */
+.si-glass {
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.075), rgb(255 255 255 / 0.035));
+  border: 1px solid rgb(255 255 255 / 0.09);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.06),
+    0 18px 40px -18px rgb(0 0 0 / 0.6);
+  backdrop-filter: blur(10px);
+}
+
+/*
+ * Product preview: one ~11 s story, restarted by React (the scene is re-keyed each loop).
+ * Every element's resting style is its END state, so reduced motion simply shows the finished picture.
+ */
+@keyframes si-scene {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  4%,
+  94% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.si-scene {
+  animation: si-scene 11s var(--ease-in-out) both;
+}
+@keyframes si-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+}
+.si-spark-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: si-draw 1500ms var(--ease-out) 250ms both;
+}
+.si-spark-area {
+  animation: fade-in 900ms var(--ease-out) 900ms both;
+}
+@keyframes si-dot-in {
+  from {
+    opacity: 0;
+    transform: scale(0);
+  }
+}
+.si-spark-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: si-dot-in 360ms var(--ease-spring) 1650ms both;
+}
+.si-delta {
+  animation: pop-in 360ms var(--ease-spring) 1700ms both;
+}
+/* A due row ticks off: the ring fills green, the tick draws, the label is struck through. */
+@keyframes si-tick-fill {
+  from {
+    background-color: transparent;
+    border-color: rgb(255 255 255 / 0.28);
+  }
+}
+.si-tick {
+  background-color: var(--positive);
+  border-color: var(--positive);
+  animation: si-tick-fill 260ms var(--ease-out) var(--at, 2s) both;
+}
+.si-tick path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: si-draw 260ms var(--ease-out) calc(var(--at, 2s) + 120ms) both;
+}
+@keyframes si-tick-pop {
+  50% {
+    transform: scale(1.18);
+  }
+}
+.si-tick-wrap {
+  animation: si-tick-pop 320ms var(--ease-spring) var(--at, 2s) both;
+}
+.si-fade-done {
+  opacity: 0.45;
+  animation: si-fade-to-done 300ms var(--ease-out) calc(var(--at, 2s) + 120ms) both;
+}
+.si-strike {
+  position: relative;
+  opacity: 0.5;
+  animation: si-fade-to-done 300ms var(--ease-out) calc(var(--at, 2s) + 120ms) both;
+}
+@keyframes si-fade-to-done {
+  from {
+    opacity: 1;
+  }
+}
+.si-strike::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  right: -2px;
+  top: 52%;
+  height: 1.5px;
+  border-radius: 2px;
+  background: currentColor;
+  transform-origin: left;
+  animation: si-strike 320ms var(--ease-out) calc(var(--at, 2s) + 120ms) both;
+}
+@keyframes si-strike {
+  from {
+    transform: scaleX(0);
+  }
+}
+/* The "marked paid" toast drops in like the app's own toast, then lifts away. */
+.si-toast {
+  animation:
+    toast-in 520ms var(--ease-spring-soft) 2450ms both,
+    toast-out var(--dur-base) var(--ease-in) 6600ms forwards;
+}
+.si-toast-icon {
+  animation: toast-icon-in 420ms var(--ease-spring) 2600ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .si-scene,
+  .si-scene *,
+  .si-scene *::after,
+  .si-caret,
+  .si-verifying > * {
+    animation: none !important;
+  }
+}
+
 /* Reduced motion: everything becomes instant; the toast countdown keeps its real duration (it is a timer). */
 @media (prefers-reduced-motion: reduce) {
   *,
