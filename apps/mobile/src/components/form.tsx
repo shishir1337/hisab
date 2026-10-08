@@ -2,6 +2,7 @@ import { addDays, addMonths, dayLabel } from '@hisab/core'
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Minus, Plus } from 'lucide-react-native'
 import { useState, type ReactNode } from 'react'
 import { ScrollView, Switch, Text, TextInput, View, type TextInputProps } from 'react-native'
+import { haptic } from '@/lib/motion'
 import { useTheme } from '@/lib/theme'
 import { Press } from './press'
 
@@ -183,12 +184,16 @@ function StepIcon({ label, onPress, children, disabled }: { label: string; onPre
 /** Label + help on the left, a switch on the right — inside a card. */
 export function SwitchRow({ label, description, value, onValueChange }: { label: string; description?: string; value: boolean; onValueChange: (v: boolean) => void }) {
   const { colors, scheme } = useTheme()
+  const change = (v: boolean) => {
+    haptic.selection()
+    onValueChange(v)
+  }
   return (
     <Press
       accessibilityRole="switch"
       accessibilityLabel={label}
       accessibilityState={{ checked: value }}
-      onPress={() => onValueChange(!value)}
+      onPress={() => change(!value)}
       feedback="none"
       style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: 56, paddingVertical: 12 }}
     >
@@ -198,7 +203,7 @@ export function SwitchRow({ label, description, value, onValueChange }: { label:
       </View>
       <Switch
         value={value}
-        onValueChange={onValueChange}
+        onValueChange={change}
         trackColor={{ true: colors.brand, false: scheme === 'dark' ? '#3A3B3F' : '#D9D9D4' }}
         thumbColor={value ? colors.brandFg : scheme === 'dark' ? colors.textMuted : '#FFFFFF'}
         accessibilityElementsHidden
