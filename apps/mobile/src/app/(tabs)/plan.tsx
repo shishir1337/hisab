@@ -181,9 +181,11 @@ function Recurring() {
   }
   const togglePause = async (r: RecurringRuleView) => {
     const pause = !r.paused_at
-    await pauseRecurringRule(db, r.id, pause, today)
     const name = r.note || r.category_name || 'Recurring item'
-    toast({ message: pause ? `${name} paused` : `${name} resumed`, onUndo: () => pauseRecurringRule(db, r.id, !pause, today) })
+    // Toast at once; Undo waits for the write it reverses.
+    const done = pauseRecurringRule(db, r.id, pause, today)
+    toast({ message: pause ? `${name} paused` : `${name} resumed`, onUndo: async () => (await done, pauseRecurringRule(db, r.id, !pause, today)) })
+    await done.catch(() => toast({ message: 'Couldn’t change that. Please try again.', kind: 'error' }))
   }
 
   if (rules.length === 0)

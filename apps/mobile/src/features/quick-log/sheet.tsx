@@ -16,7 +16,7 @@ import { usePowerSync, useQuery } from '@powersync/react'
 import { Calendar, ChevronLeft, ChevronRight, Globe, Plus, StickyNote, Trash2, User, Wallet, X } from 'lucide-react-native'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { router } from 'expo-router'
-import { Pressable, Text, View } from 'react-native'
+import { Text, View } from 'react-native'
 import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated'
 // Gesture-handler's ScrollView cooperates with the sheet's pan gesture; RN's horizontal rows never scrolled.
 import { ScrollView } from 'react-native-gesture-handler'
@@ -333,7 +333,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
 
       {/* Inline panels */}
       {panel === 'categories' && (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 4, borderRadius: 16, backgroundColor: colors.surfaceMuted, paddingVertical: 8, paddingHorizontal: 4 }}>
+        <Animated.View entering={reduced ? undefined : FadeIn.duration(duration.base).easing(easing.out)} style={{ flexDirection: 'row', flexWrap: 'wrap', rowGap: 4, borderRadius: 16, backgroundColor: colors.surfaceMuted, paddingVertical: 8, paddingHorizontal: 4 }}>
           {categories.map((c) => (
             <Press
               key={c.id}
@@ -353,7 +353,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
               </Text>
             </Press>
           ))}
-        </View>
+        </Animated.View>
       )}
       {(panel === 'account' || panel === 'toAccount') && (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={BLEED} contentContainerStyle={ROW}>
@@ -439,18 +439,19 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
       )}
       {panel === 'fx' && form.fx && (
         <View className="gap-2">
-          <Pressable
+          <Press
             accessibilityRole="button"
+            haptic="selection"
             onPress={() => {
               dispatch({ type: 'toggleFx' })
               setPanel('none')
             }}
-            className="flex-row items-center gap-1.5 self-start py-1"
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4 }}
             hitSlop={8}
           >
             <X size={14} color={colors.textMuted} />
             <Text style={{ color: colors.textMuted, fontSize: 12.5 }}>Received in {profile.currency} instead</Text>
-          </Pressable>
+          </Press>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled" style={BLEED} contentContainerStyle={ROW}>
             {FX_CURRENCIES.map((c) => (
               <Chip key={c} size="sm" label={c} selected={form.fx?.currency === c} onPress={() => dispatch({ type: 'setFxCurrency', value: c })} />

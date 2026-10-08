@@ -68,6 +68,8 @@ export function ToastHost() {
   const y = useSharedValue(OFFSCREEN)
   const fade = useSharedValue(0)
   const drag = useSharedValue(0)
+  const fling = useSharedValue(0)
+  const dragging = useSharedValue(false)
   const scale = useSharedValue(1)
   const progress = useSharedValue(1)
   const leaving = useSharedValue(false)
@@ -154,22 +156,30 @@ export function ToastHost() {
       Gesture.Pan()
         .activeOffsetY([-6, 6])
         .onStart(() => {
+          dragging.value = true
           cancelAnimation(progress)
         })
         .onUpdate((e) => {
           // Up follows the finger; down gives a little and resists.
           drag.value = e.translationY < 0 ? e.translationY : 14 * Math.log1p(e.translationY / 14)
+          fling.value = e.velocityY
         })
-        .onEnd((e) => {
-          if (e.translationY < -24 || e.velocityY < -500) {
-            drag.value = withTiming(Math.min(e.translationY, 0) - 40, { duration: duration.fast, easing: easing.out })
-            scheduleOnRN(dismiss, e.velocityY)
+        // onFinalize also runs when the system cancels the touch (e.g. it ends in the status-bar zone), so a
+        // drag never leaves the toast stuck with its countdown paused.
+        .onFinalize(() => {
+          if (!dragging.value) return
+          dragging.value = false
+          const up = drag.value < -24 || fling.value < -500
+          if (up) {
+            drag.value = withTiming(Math.min(drag.value, 0) - 40, { duration: duration.fast, easing: easing.out })
+            scheduleOnRN(dismiss, fling.value)
           } else {
             drag.value = withSpring(0, spring.snappy)
             scheduleOnRN(resume)
           }
+          fling.value = 0
         }),
-    [drag, progress, dismiss, resume],
+    [drag, fling, dragging, progress, dismiss, resume],
   )
 
   const pillStyle = useAnimatedStyle(() => ({
