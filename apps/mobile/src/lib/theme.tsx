@@ -38,9 +38,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const scheme: ThemeName = preference === 'system' ? (system === 'dark' ? 'dark' : 'light') : preference
 
+  // NativeWind's setColorScheme('dark') also overrides RN's Appearance, so `useColorScheme()` would keep
+  // reporting dark after switching back to System. Handing it 'system' releases the override.
   useEffect(() => {
-    nativewind.setColorScheme(scheme)
-  }, [scheme, nativewind])
+    nativewind.setColorScheme(preference === 'system' ? 'system' : scheme)
+  }, [preference, scheme, nativewind])
 
   const value = useMemo<ThemeState>(
     () => ({
