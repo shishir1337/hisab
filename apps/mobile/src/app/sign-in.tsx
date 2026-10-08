@@ -96,15 +96,15 @@ export default function SignInScreen() {
                       Continue with Google
                     </Button>
                   </View>
-                  <ErrorText message={googleError} />
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: googleError ? 0 : 18 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                  {googleError && <ErrorText message={googleError} />}
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: googleError ? 4 : 22 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
                     <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                     <Text style={{ color: colors.textFaint, fontSize: 12.5 }}>or</Text>
                     <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                   </View>
                 </>
               )}
-              <Text style={{ color: colors.text, fontSize: 13.5, fontWeight: '600', marginTop: showGoogle ? 18 : 28, marginBottom: 8 }}>Email</Text>
+              <Text style={{ color: colors.text, fontSize: 13.5, fontWeight: '600', marginTop: showGoogle ? 22 : 28, marginBottom: 8 }}>Email</Text>
               <TextInput
                 accessibilityLabel="Email"
                 autoFocus={!showGoogle}
