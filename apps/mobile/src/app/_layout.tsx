@@ -12,11 +12,16 @@ import { PowerSyncProvider } from '@/lib/powersync'
 import { PrefsProvider } from '@/lib/prefs'
 import { PrivacyProvider } from '@/lib/privacy'
 import { AppLock } from '@/components/app-lock'
+import { LaunchIntro, SPLASH_FADE_MS, useAppReleased } from '@/components/launch-intro'
+import { FirstRunProvider, useFirstRun } from '@/lib/first-run'
+import { showWelcome } from '@/lib/first-run-model'
 import { SessionProvider, useSession } from '@/lib/session'
 import { ThemeProvider, useTheme } from '@/lib/theme'
 import { ToastHost, UndoProvider } from '@/lib/undo'
 
 void SplashScreen.preventAutoHideAsync()
+// The launch intro's first frame is identical to the splash, so a short cross-fade is invisible.
+SplashScreen.setOptions({ duration: SPLASH_FADE_MS, fade: true })
 
 export default function RootLayout() {
   return (
@@ -24,13 +29,16 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ThemeProvider>
           <SessionProvider>
-            <PowerSyncProvider>
-              <PrefsProvider>
-                <UndoProvider>
-                  <RootStack />
-                </UndoProvider>
-              </PrefsProvider>
-            </PowerSyncProvider>
+            <FirstRunProvider>
+              <PowerSyncProvider>
+                <PrefsProvider>
+                  <UndoProvider>
+                    <RootStack />
+                  </UndoProvider>
+                </PrefsProvider>
+              </PowerSyncProvider>
+              <Intro />
+            </FirstRunProvider>
           </SessionProvider>
         </ThemeProvider>
       </SafeAreaProvider>
@@ -38,13 +46,25 @@ export default function RootLayout() {
   )
 }
 
-function RootStack() {
-  const { user, ready } = useSession()
-  const { scheme, colors } = useTheme()
+/** Animated brand intro over everything; it hides the native splash once it's on screen. */
+function Intro() {
+  const session = useSession()
+  const firstRun = useFirstRun()
+  return <LaunchIntro ready={session.ready && firstRun.ready} planReady={firstRun.ready} firstLaunch={firstRun.firstLaunch} />
+}
 
+function RootStack() {
+  const { user, ready: sessionReady } = useSession()
+  const firstRun = useFirstRun()
+  const { scheme, colors } = useTheme()
+  const released = useAppReleased()
+  const ready = sessionReady && firstRun.ready && released
+  const { welcomeSeen, markWelcomeSeen } = firstRun
+
+  // Anyone who has been signed in on this device is past the walkthrough (also covers existing installs).
   useEffect(() => {
-    if (ready) void SplashScreen.hideAsync()
-  }, [ready])
+    if (user && !welcomeSeen) markWelcomeSeen()
+  }, [user, welcomeSeen, markWelcomeSeen])
 
   if (!ready) return null
   const stack = (
@@ -66,8 +86,12 @@ function RootStack() {
           <Stack.Screen name="lend" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           <Stack.Screen name="repay" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
         </Stack.Protected>
+        {/* First launch, signed out: the walkthrough comes first; finishing it unguards sign-in's place. */}
+        <Stack.Protected guard={showWelcome(Boolean(user), welcomeSeen)}>
+          <Stack.Screen name="welcome" options={{ animation: 'fade' }} />
+        </Stack.Protected>
         <Stack.Protected guard={!user}>
-          <Stack.Screen name="sign-in" />
+          <Stack.Screen name="sign-in" options={{ animation: 'fade' }} />
         </Stack.Protected>
         {/* The email's sign-in link opens here, signed in or not. */}
         <Stack.Screen name="auth-callback" options={{ animation: 'fade' }} />
