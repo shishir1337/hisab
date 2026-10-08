@@ -20,7 +20,7 @@ import { Banknote, ChevronRight, CreditCard, Download, Landmark, LogOut, PiggyBa
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import { useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/components/ui/toaster'
 import { Money } from '@/components/money'
 import { download } from '@/components/report-view'
 import { Button } from '@/components/ui/button'
@@ -29,6 +29,7 @@ import { Dialog, DialogContent, Field } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Segmented } from '@/components/ui/segmented'
 import { Switch } from '@/components/ui/switch'
+import { useLastDefined } from '@/lib/motion'
 import { usePrivacy } from '@/lib/privacy'
 import { useProfile, useUserEmail } from '@/lib/profile'
 import { getSupabase } from '@/lib/supabase/client'
@@ -70,7 +71,7 @@ export function SettingsView() {
   const [deleting, setDeleting] = useState(false)
   const [exporting, setExporting] = useState(false)
   const browserTz = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedOptions().timeZone : 'UTC'
-  const pref = (patch: Parameters<typeof saveProfile>[2]) => void saveProfile(db, userId, patch).catch((e) => toast(e instanceof Error ? e.message : 'Couldn’t save'))
+  const pref = (patch: Parameters<typeof saveProfile>[2]) => void saveProfile(db, userId, patch).catch((e) => toast.error(e instanceof Error ? e.message : 'Couldn’t save'))
 
   const [signingOut, setSigningOut] = useState(false)
   // Unsynced changes counted when "remove data" is clicked; non-null = asking for confirmation.
@@ -90,7 +91,7 @@ export function SettingsView() {
         await db.disconnectAndClear()
       } catch {
         setSigningOut(false)
-        return toast('Couldn’t remove the data from this browser. You’re still signed in.')
+        return toast.error('Couldn’t remove the data from this browser. You’re still signed in.')
       }
     }
     const { error } = await getSupabase().auth.signOut()
@@ -105,7 +106,7 @@ export function SettingsView() {
     const { error } = await getSupabase().functions.invoke('delete-account', { body: { confirm: 'DELETE' } })
     if (error) {
       setDeleting(false)
-      return toast('Couldn’t delete the account. Check your connection and try again.')
+      return toast.error('Couldn’t delete the account. Check your connection and try again.')
     }
     await db.disconnectAndClear().catch(() => {})
     await getSupabase().auth.signOut({ scope: 'local' })
@@ -113,6 +114,7 @@ export function SettingsView() {
   }
   const { data: accounts } = useQuery<AccountWithBalance>(Q.accountsWithBalance)
   const [editing, setEditing] = useState<AccountWithBalance | 'new' | null>(null)
+  const editView = useLastDefined(editing)
 
   const exportAll = async () => {
     if (exporting) return
@@ -133,7 +135,7 @@ export function SettingsView() {
       download(new Blob([zipSync(files) as BlobPart], { type: 'application/zip' }), `hisab-export-${new Date().toISOString().slice(0, 10)}.zip`)
       toast('Export downloaded')
     } catch {
-      toast('Export failed. Please try again.')
+      toast.error('Export failed. Please try again.')
     } finally {
       setExporting(false)
     }
@@ -340,9 +342,9 @@ export function SettingsView() {
       </Section>
 
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
-        {editing !== null && (
-          <DialogContent title={editing === 'new' ? 'New account' : 'Edit account'} description={editing === 'new' ? 'Where you keep money: cash, a bank, a wallet or a card.' : undefined}>
-            <AccountForm account={editing === 'new' ? null : editing} onDone={() => setEditing(null)} />
+        {editView !== null && (
+          <DialogContent title={editView === 'new' ? 'New account' : 'Edit account'} description={editView === 'new' ? 'Where you keep money: cash, a bank, a wallet or a card.' : undefined}>
+            <AccountForm account={editView === 'new' ? null : editView} onDone={() => setEditing(null)} />
           </DialogContent>
         )}
       </Dialog>

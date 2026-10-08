@@ -19,7 +19,7 @@ import {
 import { usePowerSync, useQuery } from '@powersync/react'
 import { Minus, Pause, Play, Plus, Trash2 } from 'lucide-react'
 import { useId, useRef, useState, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/components/ui/toaster'
 import { Money } from '@/components/money'
 import { Button, Kbd } from '@/components/ui/button'
 import { Chip, Select } from '@/components/ui/chip'

@@ -19,9 +19,10 @@ export function Progress({ value, tone = 'neutral', label, className }: { value:
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(pct)}
-      className={cn('h-1.5 overflow-hidden rounded-full bg-border/70 dark:bg-border', className)}
+      className={cn('h-1.5 overflow-hidden rounded-full bg-border/70 [contain:paint] dark:bg-border', className)}
     >
-      <div className={cn('h-full rounded-full transition-[width] duration-500 ease-out', FILL[tone])} style={{ width: `${pct > 0 ? Math.max(pct, 1.5) : 0}%` }} />
+      {/* Full-width fill slid left by what's missing: transform-only, and the leading edge stays round. */}
+      <div className={cn('progress-fill h-full w-full rounded-full', FILL[tone])} style={{ ['--fill' as string]: `${(pct > 0 ? Math.max(pct, 1.5) : 0) - 100}%` }} />
     </div>
   )
 }

@@ -9,7 +9,7 @@ export function Chip({ selected, icon, children, className, size = 'md', ...prop
       type="button"
       aria-pressed={selected}
       className={cn(
-        'inline-flex shrink-0 items-center gap-1.5 rounded-full border whitespace-nowrap transition-[background-color,border-color,color] duration-150',
+        'chip inline-flex shrink-0 items-center gap-1.5 rounded-full border whitespace-nowrap transition-[background-color,border-color,color,transform] duration-150 active:scale-[0.96]',
         size === 'sm' ? 'h-8 px-3 text-[12.5px]' : 'h-9 px-3.5 text-[13px]',
         selected
           ? 'border-brand bg-brand font-semibold text-brand-fg'

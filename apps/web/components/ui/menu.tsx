@@ -75,21 +75,22 @@ export function Menu({
   return (
     <div ref={wrap} className={cn('relative', wrapperClassName)}>
       {trigger({ ref: btn, onClick: () => setOpen((o) => !o), 'aria-haspopup': 'menu', 'aria-expanded': open, 'aria-controls': id })}
-      {open && (
-        <div
-          ref={list}
-          id={id}
-          role="menu"
-          className={cn(
-            'animate-in absolute z-40 min-w-52 rounded-[14px] border border-border bg-surface p-1.5 shadow-[var(--shadow-pop)]',
-            side === 'bottom' ? 'top-[calc(100%+6px)]' : 'bottom-[calc(100%+6px)]',
-            align === 'end' ? 'right-0' : 'left-0',
-            className,
-          )}
-        >
-          <CloseContext value={() => close()}>{children}</CloseContext>
-        </div>
-      )}
+      {/* Always rendered so it can animate out (CSS: .menu-pop, display toggled with allow-discrete). */}
+      <div
+        ref={list}
+        id={id}
+        role="menu"
+        data-open={open || undefined}
+        style={{ ['--menu-origin' as string]: `${side === 'bottom' ? 'top' : 'bottom'} ${align === 'end' ? 'right' : 'left'}` }}
+        className={cn(
+          'menu-pop absolute z-40 min-w-52 rounded-[14px] border border-border bg-surface p-1.5 shadow-[var(--shadow-pop)]',
+          side === 'bottom' ? 'top-[calc(100%+6px)]' : 'bottom-[calc(100%+6px)]',
+          align === 'end' ? 'right-0' : 'left-0',
+          className,
+        )}
+      >
+        <CloseContext value={() => close()}>{children}</CloseContext>
+      </div>
     </div>
   )
 }
@@ -107,7 +108,7 @@ export function MenuItem({ icon, children, onSelect, trailing, tone, disabled }:
         onSelect()
       }}
       className={cn(
-        'flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] outline-none transition-colors duration-100 hover:bg-surface-muted focus-visible:bg-surface-muted focus-visible:outline-none disabled:opacity-40 [&>svg]:size-4 [&>svg]:shrink-0',
+        'flex h-9 w-full items-center gap-2.5 rounded-[9px] px-2.5 text-left text-[13.5px] outline-none transition-[background-color,transform] duration-100 hover:bg-surface-muted active:scale-[0.985] focus-visible:bg-surface-muted focus-visible:outline-none disabled:opacity-40 [&>svg]:size-4 [&>svg]:shrink-0',
         tone === 'danger' ? 'text-danger' : 'text-text [&>svg]:text-text-muted',
       )}
     >

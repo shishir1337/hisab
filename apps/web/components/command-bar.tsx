@@ -4,7 +4,7 @@ import { Command } from 'cmdk'
 import { ArrowLeftRight, BarChart3, Eye, EyeOff, Home, ListOrdered, Minus, Moon, Plus, Search, Settings, Sun, Target, Users } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { useQuickLog } from '@/components/quick-log/quick-log'
 import { Kbd } from '@/components/ui/button'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -52,7 +52,6 @@ export function CommandBar() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      {open && (
         <DialogContent title="Command" hideClose hideHeader className="max-w-[560px] overflow-hidden p-0 md:p-0">
           <Command label="Command bar" loop className="flex flex-col">
             <div className="flex items-center gap-3 border-b border-border px-5">
@@ -61,6 +60,7 @@ export function CommandBar() {
               <Kbd>esc</Kbd>
             </div>
             <Command.List className="max-h-[min(380px,60vh)] scroll-py-2 overflow-y-auto p-2">
+              <Glide />
               <Command.Empty className="px-3 py-10 text-center text-[13px] text-text-muted">No matching commands.</Command.Empty>
               <Group heading="Log">
                 <Item icon={<Minus />} onSelect={run(() => quickLog.open({ type: 'expense' }))} shortcut="N" keywords={['spend', 'add', 'expense']}>
@@ -117,7 +117,6 @@ export function CommandBar() {
             </div>
           </Command>
         </DialogContent>
-      )}
     </Dialog>
   )
 }
@@ -138,11 +137,43 @@ function Item({ icon, children, onSelect, shortcut, keywords }: { icon: ReactNod
     <Command.Item
       onSelect={onSelect}
       keywords={keywords}
-      className="group flex h-11 cursor-pointer items-center gap-3 rounded-[10px] px-2.5 text-[14px] text-text transition-colors duration-75 data-[selected=true]:bg-surface-muted"
+      className="group relative z-[1] flex h-11 cursor-pointer items-center gap-3 rounded-[10px] px-2.5 text-[14px] text-text"
     >
       <span className="grid size-7 place-items-center rounded-[8px] border border-border bg-surface text-text-muted group-data-[selected=true]:text-text [&_svg]:size-[15px]">{icon}</span>
       <span className="flex-1">{children}</span>
       {shortcut && <Kbd>{shortcut}</Kbd>}
     </Command.Item>
   )
+}
+
+/** One highlight that glides to the selected item (keyboard or pointer) instead of blinking between rows. */
+function Glide() {
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = ref.current
+    const sizer = el?.parentElement
+    if (!el || !sizer) return
+    let placed = false
+    const place = () => {
+      const item = sizer.querySelector<HTMLElement>('[cmdk-item][data-selected="true"]')
+      if (!item) {
+        el.style.opacity = '0'
+        return
+      }
+      if (!placed) el.style.transition = 'none'
+      el.style.opacity = '1'
+      el.style.height = `${item.offsetHeight}px`
+      el.style.transform = `translateY(${item.offsetTop}px)`
+      if (!placed) {
+        void el.offsetWidth
+        el.style.transition = ''
+        placed = true
+      }
+    }
+    place()
+    const mo = new MutationObserver(place)
+    mo.observe(sizer, { subtree: true, childList: true, attributes: true, attributeFilter: ['data-selected'] })
+    return () => mo.disconnect()
+  }, [])
+  return <div ref={ref} aria-hidden className="cmdk-glide pointer-events-none absolute inset-x-0 top-0 rounded-[10px] bg-surface-muted opacity-0" />
 }
