@@ -1,7 +1,7 @@
 import type { KeypadKey } from '@hisab/core'
-import * as Haptics from 'expo-haptics'
 import { Delete } from 'lucide-react-native'
 import { Text, View } from 'react-native'
+import { haptic } from '@/lib/motion'
 import { useTheme } from '@/lib/theme'
 import { Press } from './press'
 
@@ -26,19 +26,20 @@ export function Keypad({ onKey }: { onKey: (k: KeypadKey) => void }) {
               accessibilityLabel={k === 'back' ? 'Delete' : k === '.' ? 'Decimal point' : k}
               accessibilityHint={k === 'back' ? 'Long-press to clear' : undefined}
               onPress={() => {
-                void Haptics.selectionAsync()
+                haptic.selection()
                 onKey(k)
               }}
               onLongPress={
                 k === 'back'
                   ? () => {
-                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium)
+                      haptic.medium()
                       onKey('clear')
                     }
                   : undefined
               }
-              feedback="none"
-              pressedStyle={{ backgroundColor: colors.border, transform: [{ scale: 0.98 }] }}
+              feedback="scale"
+              pressScale={0.94}
+              pressedStyle={{ backgroundColor: colors.border }}
               style={{ height: 52, flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 14, backgroundColor: colors.surfaceMuted }}
             >
               {k === 'back' ? (

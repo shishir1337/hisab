@@ -9,14 +9,15 @@ import {
   updateTransaction,
   ValidationError,
   type CategoryOption,
+  transactionInput,
   type TransactionDraft,
 } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
-import * as Haptics from 'expo-haptics'
 import { Calendar, ChevronLeft, ChevronRight, Globe, Plus, StickyNote, Trash2, User, Wallet, X } from 'lucide-react-native'
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { router } from 'expo-router'
 import { Pressable, Text, View } from 'react-native'
+import Animated, { FadeIn, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated'
 // Gesture-handler's ScrollView cooperates with the sheet's pan gesture; RN's horizontal rows never scrolled.
 import { ScrollView } from 'react-native-gesture-handler'
 import { Button } from '@/components/button'
@@ -24,9 +25,11 @@ import { Press } from '@/components/press'
 import { Chip } from '@/components/chip'
 import { IconTile } from '@/components/icon-tile'
 import { Keypad } from '@/components/keypad'
-import { Money } from '@/components/money'
+import { KeypadAmount } from '@/components/keypad-amount'
 import { Segmented } from '@/components/segmented'
+import { txTitle } from '@/components/transaction-row'
 import { useProfile, useToday } from '@/lib/profile'
+import { duration, easing, haptic, useMotion } from '@/lib/motion'
 import { useTheme } from '@/lib/theme'
 import { useToast } from '@/lib/undo'
 import { formReducer, initialForm, toDraft, type QuickLogType } from '@hisab/db'
@@ -65,7 +68,18 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
 
   const [panel, setPanel] = useState<Panel>('none')
   const [hint, setHint] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  // Save has gone through: the button shows ✓ for a beat, then the sheet closes.
+  const [done, setDone] = useState(false)
+  const { reduced } = useMotion()
+  const shakeX = useSharedValue(0)
+  const shakeStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shakeX.value }] }))
+  /** Blocked save: warning haptic and a short head-shake on the button (no movement with reduced motion). */
+  const refuse = (kind: 'warning' | 'error') => {
+    haptic[kind]()
+    if (reduced) return
+    const t = (x: number) => withTiming(x, { duration: 45, easing: easing.inOut })
+    shakeX.value = withSequence(t(-9), t(8), t(-6), t(4), t(-2), t(0))
+  }
   // A ref (not state) so in-flight async lookups see the user's latest explicit choice.
   const accountTouched = useRef(false)
   const busy = useRef(false)
@@ -110,47 +124,60 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
     }
   }
 
-  const commit = async (draft: TransactionDraft, label: string) => {
+  /**
+   * Save: validate, morph Save into ✓ (success haptic), close the sheet, then write. The write comes last on
+   * purpose — every live query re-runs when it lands, and on a busy JS thread that would hold the ✓ (and the
+   * close) on screen for a second or more. Validation runs first, so the write itself can only fail on a
+   * storage error, which is reported with a toast.
+   */
+  const commit = (draft: TransactionDraft, label: string) => {
     if (busy.current) return
+    const checked = transactionInput.safeParse(draft)
+    if (!checked.success) {
+      refuse('error')
+      setHint(checked.error.issues[0]?.message ?? 'Check the details')
+      return
+    }
     busy.current = true
-    setSaving(true)
-    try {
-      if (editing && options.edit) {
-        const before = options.edit
-        await updateTransaction(db, form.editingId!, draft)
-        toast({
-          message: `Updated · ${label}`,
-          onUndo: () =>
-            updateTransaction(db, before.id, {
-              type: before.type,
-              amount_minor: before.amount_minor,
-              account_id: before.account_id,
-              to_account_id: before.to_account_id,
-              category_id: before.category_id,
-              party_id: before.party_id,
-              occurred_on: before.occurred_on,
-              occurred_at: before.occurred_at,
-              note: before.note,
-              original_amount_minor: before.original_amount_minor,
-              original_currency: before.original_currency,
-              fx_rate: before.fx_rate,
-            }),
-        })
-      } else {
-        const id = await createTransaction(db, profile.userId, draft)
-        toast({ message: `Saved · ${label}`, onUndo: () => softDeleteTransaction(db, id) })
-        if (draft.type === 'expense' && draft.category_id) {
-          void checkBudgetAlerts(db, { category_id: draft.category_id, amount_minor: draft.amount_minor, occurred_on: draft.occurred_on }, profile.currency, profile.grouping, profile.hideAmounts).catch(() => {})
-        }
-      }
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
+    setDone(true)
+    haptic.success()
+    setTimeout(() => {
       onDone()
-    } catch (e) {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error)
-      setHint(e instanceof ValidationError ? (e.issues[0]?.message ?? 'Check the details') : 'Couldn’t save. Please try again.')
-    } finally {
-      busy.current = false
-      setSaving(false)
+      void write(draft, label).catch((e: unknown) =>
+        toast({ message: e instanceof ValidationError ? (e.issues[0]?.message ?? 'Check the details') : 'Couldn’t save. Please try again.', kind: 'error' }),
+      )
+    }, reduced ? duration.fast : 360)
+  }
+
+  const write = async (draft: TransactionDraft, label: string) => {
+    if (editing && options.edit) {
+      const before = options.edit
+      await updateTransaction(db, form.editingId!, draft)
+      toast({
+        haptic: false,
+        message: `Updated · ${label}`,
+        onUndo: () =>
+          updateTransaction(db, before.id, {
+            type: before.type,
+            amount_minor: before.amount_minor,
+            account_id: before.account_id,
+            to_account_id: before.to_account_id,
+            category_id: before.category_id,
+            party_id: before.party_id,
+            occurred_on: before.occurred_on,
+            occurred_at: before.occurred_at,
+            note: before.note,
+            original_amount_minor: before.original_amount_minor,
+            original_currency: before.original_currency,
+            fx_rate: before.fx_rate,
+          }),
+      })
+      return
+    }
+    const id = await createTransaction(db, profile.userId, draft)
+    toast({ message: `Saved · ${label}`, onUndo: () => softDeleteTransaction(db, id), haptic: false })
+    if (draft.type === 'expense' && draft.category_id) {
+      void checkBudgetAlerts(db, { category_id: draft.category_id, amount_minor: draft.amount_minor, occurred_on: draft.occurred_on }, profile.currency, profile.grouping, profile.hideAmounts).catch(() => {})
     }
   }
 
@@ -160,7 +187,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
   const save = () => {
     const r = toDraft(form, new Date(), profile.timeZone)
     if (!r.ok) {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning)
+      refuse('warning')
       setHint(MISSING_HINT[r.missing])
       if (r.missing === 'category') setPanel('categories')
       if (r.missing === 'toAccount') setPanel('toAccount')
@@ -194,17 +221,22 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
         occurred_on: form.day,
         occurred_at: base?.occurred_at ?? new Date().toISOString(),
       }
-      await commit(draft, `${s.note || cat?.name || ''} ${moneyText(s.amount_minor)}`)
+      commit(draft, `${s.note || cat?.name || ''} ${moneyText(s.amount_minor)}`)
     })()
   }
 
   const remove = async () => {
     if (!form.editingId) return
     const id = form.editingId
-    await softDeleteTransaction(db, id)
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-    toast({ message: 'Deleted', onUndo: () => restoreTransaction(db, id) })
+    const txLabel = options.edit ? txTitle(options.edit) : ''
+    // Close first: the delete re-runs every live query, which would otherwise hold the sheet open.
     onDone()
+    try {
+      await softDeleteTransaction(db, id)
+      toast({ message: `Deleted · ${txLabel}`, onUndo: () => restoreTransaction(db, id) })
+    } catch {
+      toast({ message: 'Couldn’t delete it. Please try again.', kind: 'error' })
+    }
   }
 
   const togglePanel = (p: Panel) => setPanel((cur) => (cur === p ? 'none' : p))
@@ -254,15 +286,7 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
 
       {/* Amount */}
       <View style={{ alignItems: 'center', paddingVertical: 10, minHeight: 72, justifyContent: 'center' }}>
-        <Money
-          reveal
-          minor={typed ?? 0}
-          currency={form.fx ? form.fx.currency : profile.currency}
-          grouping={profile.grouping}
-          size={42}
-          weight="700"
-          color={typed === null ? colors.textFaint : colors.text}
-        />
+        <KeypadAmount keypad={form.keypad} currency={form.fx ? form.fx.currency : profile.currency} grouping={profile.grouping} color={colors.text} faint={colors.textFaint} />
         {form.fx && (
           <Text style={{ color: colors.textMuted, fontSize: 12.5, marginTop: 2 }}>
             {fxAmount !== null ? `= ${formatMoney(fxAmount, profile.currency, { grouping: profile.grouping }).text}` : 'Enter the rate you got'}
@@ -472,9 +496,13 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
 
       {panel !== 'note' && panel !== 'party' && panel !== 'fx' && panel !== 'categories' && <Keypad onKey={(key) => (dispatch({ type: 'key', key }), setHint(null))} />}
 
-      <Text accessibilityLiveRegion="polite" style={{ color: colors.danger, fontSize: 12.5, minHeight: 16, textAlign: 'center' }}>
-        {hint ?? ''}
-      </Text>
+      <View style={{ minHeight: 16 }}>
+        {hint ? (
+          <Animated.Text key={hint} entering={FadeIn.duration(duration.fast)} accessibilityLiveRegion="polite" style={{ color: colors.danger, fontSize: 12.5, textAlign: 'center' }}>
+            {hint}
+          </Animated.Text>
+        ) : null}
+      </View>
 
       <View className="flex-row gap-2">
         {editing && (
@@ -489,11 +517,11 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
             <Trash2 size={20} color={colors.danger} />
           </Press>
         )}
-        <View className="flex-1">
-          <Button onPress={save} loading={saving}>
+        <Animated.View style={[{ flex: 1 }, shakeStyle]}>
+          <Button onPress={save} done={done}>
             {editing ? 'Save changes' : 'Save'}
           </Button>
-        </View>
+        </Animated.View>
       </View>
     </View>
   )
