@@ -1,4 +1,5 @@
 import { createServerClient } from '@supabase/ssr'
+import { publicUrl } from '@/lib/public-url'
 import { NextResponse, type NextRequest } from 'next/server'
 
 const PUBLIC_PATHS = ['/sign-in', '/auth', '/offline']
@@ -32,19 +33,14 @@ export async function updateSession(request: NextRequest) {
 
   // A sign-in link that landed on the Site URL root (e.g. redirect URL not allow-listed): finish it.
   if (path === '/' && (request.nextUrl.searchParams.has('code') || request.nextUrl.searchParams.has('token_hash'))) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/auth/callback'
-    const forward = NextResponse.redirect(url)
+    const forward = NextResponse.redirect(publicUrl(request, '/auth/callback', request.nextUrl.search))
     for (const c of response.cookies.getAll()) forward.cookies.set(c)
     return forward
   }
   const isPublic = PUBLIC_PATHS.some((p) => path === p || path.startsWith(`${p}/`))
 
   const redirectTo = (pathname: string, keepNext: boolean) => {
-    const url = request.nextUrl.clone()
-    url.pathname = pathname
-    url.search = keepNext && path !== '/' ? `?next=${encodeURIComponent(path)}` : ''
-    const redirect = NextResponse.redirect(url)
+    const redirect = NextResponse.redirect(publicUrl(request, pathname, keepNext && path !== '/' ? `?next=${encodeURIComponent(path)}` : ''))
     for (const c of response.cookies.getAll()) redirect.cookies.set(c)
     return redirect
   }

@@ -1,6 +1,7 @@
 import { safeNextPath } from '@hisab/core'
 import type { EmailOtpType } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
+import { publicUrl } from '@/lib/public-url'
 import { getServerSupabase } from '@/lib/supabase/server'
 
 /**
@@ -26,13 +27,6 @@ export async function GET(request: NextRequest) {
     error = url.searchParams.get('error_description') ?? 'missing code'
   }
 
-  const dest = url.clone()
-  dest.search = ''
-  if (error) {
-    dest.pathname = '/sign-in'
-    dest.searchParams.set('error', 'link')
-  } else {
-    dest.pathname = next
-  }
+  const dest = error ? publicUrl(request, '/sign-in', '?error=link') : publicUrl(request, next)
   return NextResponse.redirect(dest)
 }
