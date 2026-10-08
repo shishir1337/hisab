@@ -17,6 +17,7 @@ import { Press } from '@/components/press'
 import { CollapsingBar, EmptyState, GUTTER, LargeTitle, TAB_SCREEN_BOTTOM, useCollapsingHeader } from '@/components/screen'
 import { RowPresence, useArrivals, type RowPresenceHandle } from '@/components/list-motion'
 import { RowMenu, type RowMenuItem } from '@/components/row-menu'
+import { Bone, RowsSkeleton, SkeletonGroup } from '@/components/skeleton'
 import { TransactionRow, txTitle } from '@/components/transaction-row'
 import { haptic } from '@/lib/motion'
 import { useQuickLog } from '@/features/quick-log/provider'
@@ -293,7 +294,14 @@ export default function ActivityScreen() {
           )
         }}
         ListEmptyComponent={
-          isLoading ? null : (
+          isLoading ? (
+            <View style={{ marginTop: 22 }}>
+              <SkeletonGroup>
+                <Bone width={90} height={12} radius={6} style={{ marginBottom: 12, marginLeft: 2 }} />
+                <RowsSkeleton count={6} />
+              </SkeletonGroup>
+            </View>
+          ) : (
             <View style={{ marginTop: 18 }}>
               {rows.length > 0 ? (
                 <EmptyState

@@ -14,6 +14,7 @@ import { Money } from '@/components/money'
 import { Press } from '@/components/press'
 import { RemindersCard } from '@/components/reminders-card'
 import { Divider, EmptyState, Screen, SectionHeader } from '@/components/screen'
+import { HeroSkeleton, RowsSkeleton, SkeletonGroup } from '@/components/skeleton'
 import { SyncPill } from '@/components/sync-pill'
 import { TransactionRow } from '@/components/transaction-row'
 import { useDueItems } from '@/features/plan/use-due'
@@ -83,7 +84,9 @@ export default function HomeScreen() {
       compactAccessory={<SettingsButton size={34} />}
     >
       {!ready && accounts.length === 0 ? (
-        <Downloading />
+        <SkeletonGroup>
+          <HeroSkeleton />
+        </SkeletonGroup>
       ) : empty ? (
         <FirstAccount />
       ) : (
@@ -103,7 +106,11 @@ export default function HomeScreen() {
         }
       />
 
-      {todays.length === 0 ? (
+      {todays.length === 0 && !ready ? (
+        <SkeletonGroup>
+          <RowsSkeleton count={3} />
+        </SkeletonGroup>
+      ) : todays.length === 0 ? (
         <EmptyState
           icon={<Sparkles size={20} color={colors.textMuted} />}
           title="Nothing logged today"
@@ -174,18 +181,6 @@ function HeaderAccessory() {
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
       <SyncPill />
       <SettingsButton />
-    </View>
-  )
-}
-
-function Downloading() {
-  const { colors } = useTheme()
-  return (
-    <View style={{ borderRadius: 24, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, padding: 20 }}>
-      <Text style={{ color: colors.text, fontSize: 17, fontWeight: '700' }}>Getting your data…</Text>
-      <Text style={{ color: colors.textMuted, fontSize: 14, marginTop: 4, lineHeight: 20 }}>
-        Your accounts and history are downloading to this phone. Connect to the internet if this takes a while.
-      </Text>
     </View>
   )
 }
