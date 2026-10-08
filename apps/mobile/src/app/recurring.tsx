@@ -110,7 +110,7 @@ export default function RecurringScreen() {
   const remove = async () => {
     if (!existing) return
     await deleteRecurringRule(db, existing.id)
-    toast({ message: 'Recurring item deleted (past entries kept)' })
+    toast({ message: 'Recurring item deleted (past entries kept)', kind: 'success' })
     router.back()
   }
 

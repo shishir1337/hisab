@@ -79,7 +79,7 @@ export default function PersonScreen() {
       await logReminderSent(db, userId, focus.l.id, channel)
       void Haptics.selectionAsync()
     } catch {
-      toast({ message: channel === 'whatsapp' ? 'WhatsApp isn’t installed — try SMS.' : 'Couldn’t open messages.' })
+      toast({ message: channel === 'whatsapp' ? 'WhatsApp isn’t installed — try SMS.' : 'Couldn’t open messages.', kind: 'error' })
     }
   }
 

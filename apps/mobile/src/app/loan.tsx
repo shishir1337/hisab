@@ -1,7 +1,6 @@
 import { loanProgress, parseAmount } from '@hisab/core'
 import { closeLoan, markEmiPaid, QP, softDeleteTransaction, type LoanWithPayments } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
-import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import { Check, Pencil } from 'lucide-react-native'
 import { useRef, useState } from 'react'
@@ -40,16 +39,15 @@ export default function LoanScreen() {
       let amount: number | undefined
       if (customAmount !== null) {
         const parsed = parseAmount(customAmount)
-        if (!parsed.ok) return toast({ message: 'Enter the amount you paid' })
+        if (!parsed.ok) return toast({ message: 'Enter the amount you paid', kind: 'error' })
         amount = parsed.minor
       }
       const txId = await markEmiPaid(db, userId, loan.id, { occurred_on: today, amount_minor: amount })
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       toast({ message: 'EMI marked paid', onUndo: () => softDeleteTransaction(db, txId) })
       setCustomAmount(null)
     } catch (e) {
       if (e instanceof Error && /account/i.test(e.message)) router.push({ pathname: '/loan-form', params: { id: loan.id } })
-      toast({ message: e instanceof Error ? e.message : 'Couldn’t record the EMI' })
+      toast({ message: e instanceof Error ? e.message : 'Couldn’t record the EMI', kind: 'error' })
     } finally {
       busy.current = false
     }

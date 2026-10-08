@@ -14,7 +14,7 @@ import { PrivacyProvider } from '@/lib/privacy'
 import { AppLock } from '@/components/app-lock'
 import { SessionProvider, useSession } from '@/lib/session'
 import { ThemeProvider, useTheme } from '@/lib/theme'
-import { UndoProvider } from '@/lib/undo'
+import { ToastHost, UndoProvider } from '@/lib/undo'
 
 void SplashScreen.preventAutoHideAsync()
 
@@ -74,13 +74,21 @@ function RootStack() {
       </Stack>
     </>
   )
-  if (!user) return <BottomSheetModalProvider>{stack}</BottomSheetModalProvider>
+  // The toast host sits after the sheet provider (above sheets) and inside AppLock (under the lock overlay).
+  if (!user)
+    return (
+      <>
+        <BottomSheetModalProvider>{stack}</BottomSheetModalProvider>
+        <ToastHost />
+      </>
+    )
   // Sheets portal into BottomSheetModalProvider: keep it inside PrivacyProvider (so sheets see "hide
   // amounts") and inside AppLock (so an open sheet can't show above the lock screen).
   return (
     <PrivacyProvider>
       <AppLock>
         <BottomSheetModalProvider>{stack}</BottomSheetModalProvider>
+        <ToastHost />
       </AppLock>
     </PrivacyProvider>
   )

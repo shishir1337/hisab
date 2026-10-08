@@ -5,7 +5,7 @@ import { AppState, StyleSheet, Text, View } from 'react-native'
 import { usePrefs } from '@/lib/prefs'
 import { supabase } from '@/lib/supabase'
 import { useTheme } from '@/lib/theme'
-import { useToast } from '@/lib/undo'
+import { ToastBlockContext, useToast } from '@/lib/undo'
 import { BrandMark } from './brand'
 import { Button } from './button'
 
@@ -84,16 +84,19 @@ export function AppLock({ children }: { children: ReactNode }) {
 
   const showLock = !ready || (enabled && locked)
   return (
-    <View style={{ flex: 1 }}>
-      {children}
-      {(showLock || (enabled && covered)) && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.page, alignItems: 'center', justifyContent: 'center', padding: 28, zIndex: 1000, elevation: 1000 }]}>
-          {showLock && ready && <LockContent failed={failed} onUnlock={() => void unlock()} />}
-          {/* While covered for the app switcher (or before prefs load) show just the mark — never balances. */}
-          {!(showLock && ready) && <BrandMark size={48} />}
-        </View>
-      )}
-    </View>
+    // Toasts render inside children: while the lock (or the app-switcher cover) is up they stay hidden.
+    <ToastBlockContext value={showLock || (enabled && covered)}>
+      <View style={{ flex: 1 }}>
+        {children}
+        {(showLock || (enabled && covered)) && (
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.page, alignItems: 'center', justifyContent: 'center', padding: 28, zIndex: 1000, elevation: 1000 }]}>
+            {showLock && ready && <LockContent failed={failed} onUnlock={() => void unlock()} />}
+            {/* While covered for the app switcher (or before prefs load) show just the mark — never balances. */}
+            {!(showLock && ready) && <BrandMark size={48} />}
+          </View>
+        )}
+      </View>
+    </ToastBlockContext>
   )
 }
 

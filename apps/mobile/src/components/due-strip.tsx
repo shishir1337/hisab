@@ -1,7 +1,6 @@
 import { daysBetween } from '@hisab/core'
 import { markEmiPaid, postOccurrence, softDeleteTransaction } from '@hisab/db'
 import { usePowerSync } from '@powersync/react'
-import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
 import { Check } from 'lucide-react-native'
 import { useRef, useState } from 'react'
@@ -86,9 +85,8 @@ function DueRow({ item, today }: { item: DueItem; today: string }) {
         const id = await markEmiPaid(db, userId, item.loan.id, { occurred_on: today })
         toast({ message: `EMI paid · ${title}`, onUndo: () => softDeleteTransaction(db, id) })
       }
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
     } catch (e) {
-      toast({ message: e instanceof Error ? e.message : 'Couldn’t record it' })
+      toast({ message: e instanceof Error ? e.message : 'Couldn’t record it', kind: 'error' })
     } finally {
       busy.current = false
       setSaving(false)

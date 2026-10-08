@@ -1,7 +1,6 @@
 import { parseAmount } from '@hisab/core'
 import { postOccurrence, Q, QP, skipOccurrence, softDeleteTransaction, unskipOccurrence, type RecurringRuleView } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
-import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
@@ -48,7 +47,6 @@ export default function DueScreen() {
     setBusy(true)
     try {
       const r = await postOccurrence(db, userId, rule, date, { amount_minor: parsed.minor, account_id: accountId ?? rule.account_id, occurred_on: day })
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       toast(r.created ? { message: 'Recorded', onUndo: () => softDeleteTransaction(db, r.id) } : { message: 'Already recorded' })
       router.back()
     } catch (e) {

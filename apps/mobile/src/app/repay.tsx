@@ -1,7 +1,6 @@
 import { formatMoney, keypadFromMinor, lendingStatus, parseAmount } from '@hisab/core'
 import { Q, QL, recordPersonRepayment, softDeleteTransaction, type LendingView } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
-import * as Haptics from 'expo-haptics'
 import { router, useLocalSearchParams } from 'expo-router'
 import { useEffect, useRef, useState } from 'react'
 import { Text, View } from 'react-native'
@@ -57,7 +56,6 @@ export default function RepayScreen() {
     setBusy(true)
     try {
       const ids = await recordPersonRepayment(db, userId, partyId, direction, { amount_minor: parsed.minor, account_id: chosen, occurred_on: day })
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
       toast({
         message: parsed.minor >= outstanding ? `Settled with ${name} 🎉` : `${hideAmounts ? `${currency} ••••` : formatMoney(parsed.minor, currency, { grouping }).text} recorded`,
         onUndo: async () => {

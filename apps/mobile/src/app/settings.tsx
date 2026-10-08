@@ -37,7 +37,7 @@ export default function SettingsScreen() {
   const [wipeAsk, setWipeAsk] = useState<number | null>(null)
   const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
   const pref = (patch: Parameters<typeof saveProfile>[2]) =>
-    void saveProfile(db, userId, patch).catch((e: unknown) => toast({ message: e instanceof Error ? e.message : 'Couldn’t save' }))
+    void saveProfile(db, userId, patch).catch((e: unknown) => toast({ message: e instanceof Error ? e.message : 'Couldn’t save', kind: 'error' }))
   const signOut = async (wipe: boolean) => {
     if (busy) return
     setBusy(true)

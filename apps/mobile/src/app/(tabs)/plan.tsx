@@ -1,7 +1,6 @@
 import { addDays, budgetProgress, loanProgress, monthRange, occurrences, safeToSpendPerDay } from '@hisab/core'
 import { groupOccurrences, pauseRecurringRule, QP, type BudgetWithSpent, type LoanWithPayments, type RecurringRuleView } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
-import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
 import { CalendarClock, ChevronRight, Landmark, Pause, Play, Plus, Target } from 'lucide-react-native'
 import { useState, type ReactNode } from 'react'
@@ -171,7 +170,6 @@ function Recurring() {
   const togglePause = async (r: RecurringRuleView) => {
     const pause = !r.paused_at
     await pauseRecurringRule(db, r.id, pause, today)
-    void Haptics.selectionAsync()
     const name = r.note || r.category_name || 'Recurring item'
     toast({ message: pause ? `${name} paused` : `${name} resumed`, onUndo: () => pauseRecurringRule(db, r.id, !pause, today) })
   }
