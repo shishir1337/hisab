@@ -1,5 +1,6 @@
 import { AppShell } from '@/components/app-shell'
 import { CommandBar } from '@/components/command-bar'
+import { AppPwa } from '@/components/pwa/app-pwa'
 import { QuickLogProvider } from '@/components/quick-log/quick-log'
 import { PowerSyncProvider } from '@/lib/powersync/provider'
 import { PrivacyProvider } from '@/lib/privacy'
@@ -11,6 +12,7 @@ export default function AppLayout({ children }: LayoutProps<'/'>) {
         <QuickLogProvider>
           <AppShell>{children}</AppShell>
           <CommandBar />
+          <AppPwa />
         </QuickLogProvider>
       </PrivacyProvider>
     </PowerSyncProvider>
@@ -35,7 +37,7 @@ function ShellSkeleton() {
         ))}
       </div>
       <div className="flex-1">
-        <div className="h-14 border-b border-border md:hidden" />
+        <div className="h-[calc(56px+env(safe-area-inset-top))] border-b border-border md:hidden" />
         <div className="mx-auto max-w-6xl px-4 pt-6 md:px-8 md:pt-10 lg:px-10">
           <div className="skeleton h-7 w-48" />
           <div className="skeleton mt-2.5 h-4 w-36" />

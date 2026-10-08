@@ -1,6 +1,8 @@
 'use client'
 
 import { createContext, use, useEffect, useId, useRef, useState, type ReactNode, type Ref } from 'react'
+import { Dialog, DialogContent, SHEET_QUERY } from '@/components/ui/dialog'
+import { useMediaQuery } from '@/lib/use-media'
 import { cn } from '@/lib/utils'
 
 interface TriggerProps {
@@ -16,22 +18,43 @@ const CloseContext = createContext<() => void>(() => {})
 /**
  * Small dropdown menu (no portal; anchored to its trigger). Arrow keys move, Esc / Tab / click outside close
  * and focus returns to the trigger. Not for use inside dialogs (Radix closes the dialog on Esc first).
+ * On phone widths it presents as a bottom action sheet instead (grabber, swipe down, roomy rows).
  */
-export function Menu({
-  trigger,
-  children,
-  align = 'end',
-  side = 'bottom',
-  className,
-  wrapperClassName,
-}: {
+export function Menu(props: MenuProps) {
+  const phone = useMediaQuery(SHEET_QUERY)
+  return phone ? <SheetMenu {...props} /> : <DropdownMenu {...props} />
+}
+
+interface MenuProps {
   trigger: (p: TriggerProps) => ReactNode
   children: ReactNode
   align?: 'start' | 'end'
   side?: 'top' | 'bottom'
   className?: string
   wrapperClassName?: string
-}) {
+  /** Accessible name of the sheet presentation (phones). */
+  title?: string
+}
+
+function SheetMenu({ trigger, children, wrapperClassName, title = 'Menu' }: MenuProps) {
+  const [open, setOpen] = useState(false)
+  const id = useId()
+  const btn = useRef<HTMLButtonElement>(null)
+  return (
+    <div className={cn('relative', wrapperClassName)}>
+      {trigger({ ref: btn, onClick: () => setOpen(true), 'aria-haspopup': 'menu', 'aria-expanded': open, 'aria-controls': id })}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent title={title} hideHeader hideClose className="sheet-menu">
+          <div id={id} role="menu" aria-label={title} className="flex flex-col">
+            <CloseContext value={() => setOpen(false)}>{children}</CloseContext>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function DropdownMenu({ trigger, children, align = 'end', side = 'bottom', className, wrapperClassName }: MenuProps) {
   const [open, setOpen] = useState(false)
   const id = useId()
   const wrap = useRef<HTMLDivElement>(null)

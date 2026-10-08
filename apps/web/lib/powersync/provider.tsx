@@ -6,6 +6,7 @@ import type { AbstractPowerSyncDatabase } from '@powersync/web'
 import { PowerSyncContext } from '@powersync/react'
 import { useRouter } from 'next/navigation'
 import { createContext, use, useEffect, useState, type ReactNode } from 'react'
+import { clearOfflinePages } from '@/lib/pwa'
 import { getSupabase } from '@/lib/supabase/client'
 
 const POWERSYNC_URL = process.env.NEXT_PUBLIC_POWERSYNC_URL || undefined
@@ -74,6 +75,7 @@ export function PowerSyncProvider({ children, fallback }: { children: ReactNode;
 
     const { data: sub } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'SIGNED_OUT') {
+        clearOfflinePages()
         void instance?.disconnect()
         router.replace('/sign-in')
       }

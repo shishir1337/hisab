@@ -25,6 +25,7 @@ import { Button, Kbd } from '@/components/ui/button'
 import { Chip, Select } from '@/components/ui/chip'
 import { Dialog, DialogContent, Field } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { haptic } from '@/lib/haptics'
 import { DUR, reducedMotion, shake } from '@/lib/motion'
 import { MASK, usePrivacy } from '@/lib/privacy'
 import { useProfile, useToday } from '@/lib/profile'
@@ -155,6 +156,7 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
         announce = () => toast(`Saved · ${label}`, { action: { label: 'Undo', onClick: () => void softDeleteTransaction(db, id) } })
       }
       // Save morphs into a check for a beat, then the dialog closes and the toast drops in.
+      haptic('success')
       setSaved(true)
       setTimeout(
         () => {
@@ -164,6 +166,7 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
         reducedMotion() ? 0 : DUR.slow + 170,
       )
     } catch (e) {
+      haptic('warning')
       shake(saveRef.current)
       setHint(e instanceof ValidationError ? (e.issues[0]?.message ?? 'Check the details') : 'Couldn’t save. Try again.')
       setBusy(false)
@@ -443,7 +446,7 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
       <p role="alert" className={cn('-my-1.5 min-h-5 text-[13px] text-danger', !hint && 'invisible')}>
         {hint ?? ' '}
       </p>
-      <div className="sticky -bottom-5 z-10 -mx-5 -mb-5 flex gap-2 border-t border-transparent bg-surface px-5 pt-1 pb-5 md:-bottom-6 md:-mx-6 md:-mb-6 md:px-6 md:pb-6">
+      <div className="sheet-footer sticky -bottom-5 z-10 -mx-5 -mb-5 flex gap-2 border-t border-transparent bg-surface px-5 pt-1 pb-5 md:-bottom-6 md:-mx-6 md:-mb-6 md:px-6 md:pb-6">
         {editing && (
           <Button variant="danger" size="lg" className="w-12 px-0" aria-label="Delete" title="Delete" onClick={() => void remove()}>
             <Trash2 />

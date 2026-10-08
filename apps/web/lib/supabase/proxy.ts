@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/sign-in', '/auth']
+const PUBLIC_PATHS = ['/sign-in', '/auth', '/offline']
 
 /**
  * Refreshes the Supabase session cookie and performs the optimistic auth redirect.

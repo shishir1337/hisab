@@ -3,11 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "assets": "powersync-web copy-assets -o public",
-    "predev": "pnpm run assets",
-    "dev": "next dev",
-    "prebuild": "pnpm run assets",
-    "build": "next build",
+    "assets": "powersync-web copy-assets -o public && node scripts/powersync-files.mjs",
+    "icons": "node scripts/generate-icons.mts",
+    "dev": "pnpm run assets && next dev",
+    "build": "pnpm run assets && next build",
     "start": "next start",
     "test": "vitest run --passWithNoTests",
     "typecheck": "next typegen && tsc --noEmit"

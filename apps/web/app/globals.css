@@ -112,8 +112,10 @@
     color: var(--text-muted);
     transition: color 150ms;
   }
-  .card-link:hover {
-    color: var(--text);
+  @media (hover: hover) {
+    .card-link:hover {
+      color: var(--text);
+    }
   }
   /* Soft edge fade for horizontally scrolling rows. */
   .fade-x {
@@ -536,8 +538,10 @@ html[data-amounts-swap] .hero-card .money {
     background-color var(--dur-fast),
     transform var(--dur-instant);
 }
-.toast-action:hover {
-  background: color-mix(in oklab, var(--page) 24%, transparent);
+@media (hover: hover) {
+  .toast-action:hover {
+    background: color-mix(in oklab, var(--page) 24%, transparent);
+  }
 }
 .toast-action:active {
   transform: scale(0.95);
@@ -555,9 +559,11 @@ html[data-amounts-swap] .hero-card .money {
     color var(--dur-fast),
     background-color var(--dur-fast);
 }
-.toast-close:hover {
-  color: var(--page);
-  background: color-mix(in oklab, var(--page) 12%, transparent);
+@media (hover: hover) {
+  .toast-close:hover {
+    color: var(--page);
+    background: color-mix(in oklab, var(--page) 12%, transparent);
+  }
 }
 .toast-close svg {
   width: 14px;
@@ -892,6 +898,236 @@ html[data-amounts-swap] .hero-card .money {
   }
 }
 
+/* ───────────── Native feel (phones, installed app) ───────────── */
+
+html {
+  /* Never reveal white behind the app (rubber-band, keyboard, rotation). */
+  background: var(--page);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+/* Taps act at once: no double-tap-to-zoom delay on controls. */
+:where(a, button, [role='button'], [role='tab'], [role='menuitem'], [role='switch'], label, summary, input, select, textarea) {
+  touch-action: manipulation;
+}
+@media (pointer: coarse) {
+  /* App chrome behaves like UI, not a document: no text selection or iOS callout on long-press. Content stays selectable. */
+  :where(button, [role='button'], [role='tab'], [role='menuitem'], [role='switch'], .app-header, .tab-bar, .sheet-grabber, .toast-pill, .launch-intro, nav a) {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+}
+/* Installed app: no pull-to-refresh, no rubber-band past the ends of the page (sync is live). */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+}
+
+/* Keyboard open (phones): the tab bar and + step aside so fields and Save have the room. */
+.tab-bar,
+.fab {
+  transition:
+    transform var(--dur-base) var(--ease-out),
+    opacity var(--dur-fast);
+}
+html[data-keyboard] .tab-bar {
+  transform: translateY(110%);
+  pointer-events: none;
+}
+html[data-keyboard] .fab {
+  transform: scale(0.6);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ───────────── Bottom sheets (dialogs and menus on phone widths) ───────────── */
+
+.sheet-grabber {
+  display: none;
+}
+@keyframes sheet-in {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+@keyframes sheet-out {
+  to {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+@media (max-width: 767.98px) {
+  .dialog-content.sheet {
+    /* Room under the last control: the home indicator, or a little air above the keyboard. */
+    --sheet-pb: calc(16px + env(safe-area-inset-bottom));
+    top: auto;
+    left: 0;
+    right: 0;
+    /* iOS: the keyboard covers the layout viewport; sit right on top of it (Android resizes instead). */
+    bottom: var(--kb, 0px);
+    translate: none;
+    width: 100%;
+    max-width: none;
+    max-height: calc(var(--vvh, 100dvh) - env(safe-area-inset-top) - 10px);
+    border-width: 1px 0 0;
+    border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+    padding: 6px 20px var(--sheet-pb);
+    box-shadow: 0 -16px 48px -16px rgb(0 0 0 / 0.28);
+    transition: bottom var(--dur-base) var(--ease-out);
+  }
+  html[data-keyboard] .dialog-content.sheet {
+    --sheet-pb: 12px;
+  }
+  .dark .dialog-content.sheet {
+    box-shadow:
+      0 0 0 1px rgb(255 255 255 / 0.05),
+      0 -16px 48px -12px rgb(0 0 0 / 0.8);
+  }
+  .dialog-content.sheet[data-state='open'] {
+    animation: sheet-in 420ms cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .dialog-content.sheet[data-state='closed'] {
+    animation: sheet-out 220ms var(--ease-in) forwards;
+  }
+  .sheet-grabber {
+    display: block;
+    position: relative;
+    width: 36px;
+    height: 5px;
+    margin: 0 auto 14px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--text) 18%, transparent);
+  }
+  /* A generous invisible handle around the grabber. */
+  .sheet-grabber::before {
+    content: '';
+    position: absolute;
+    inset: -12px -60px;
+  }
+  /* Sticky Save rows reach the sheet's bottom edge (over the home-indicator padding). */
+  .dialog-content.sheet .sheet-footer {
+    bottom: calc(-1 * var(--sheet-pb));
+    margin-bottom: calc(-1 * var(--sheet-pb));
+    padding-bottom: var(--sheet-pb);
+  }
+  /* Menus as action sheets: roomy rows. */
+  .sheet-menu {
+    padding-inline: 12px;
+  }
+  .sheet-menu [role='menuitem'] {
+    height: 50px;
+    gap: 14px;
+    padding-inline: 12px;
+    border-radius: 14px;
+    font-size: 16px;
+  }
+  .sheet-menu [role='menuitem'] > svg {
+    width: 20px;
+    height: 20px;
+  }
+  .sheet-menu [role='separator'] {
+    margin-inline: 0;
+  }
+}
+
+/* ───────────── Launch intro (installed app, cold start) ───────────── */
+
+.launch-intro {
+  display: none;
+}
+@media (display-mode: standalone) {
+  .launch-intro:not([hidden]) {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: grid;
+    place-items: center;
+    background: #f5f5f3;
+    pointer-events: none;
+  }
+}
+.launch-tile {
+  width: 88px;
+  height: 88px;
+}
+.launch-tile svg {
+  display: block;
+  overflow: visible;
+}
+.launch-tile-bg {
+  fill: #141414;
+}
+.launch-glyph {
+  fill: #fff;
+}
+.launch-hl {
+  stop-opacity: 0.07;
+}
+.launch-sheen rect {
+  fill: rgb(255 255 255 / 0.16);
+}
+@media (prefers-color-scheme: dark) {
+  .launch-intro:not([hidden]) {
+    background: #0c0c0d;
+  }
+  .launch-tile-bg {
+    fill: #ededec;
+  }
+  .launch-glyph {
+    fill: #0c0c0d;
+  }
+  .launch-hl {
+    stop-opacity: 0;
+  }
+  .launch-sheen rect {
+    fill: rgb(255 255 255 / 0.6);
+  }
+}
+/* 0–100 ms: hold the launch image's frame; the tile dips and springs back with a sheen; 360–560 ms: lift away. */
+.launch-intro[data-run] {
+  animation: launch-out 200ms var(--ease-out) 360ms forwards;
+}
+.launch-intro[data-run] .launch-tile {
+  animation: launch-tile 560ms var(--ease-in-out) both;
+}
+.launch-intro[data-run] .launch-sheen {
+  animation: launch-sheen 420ms var(--ease-in-out) 110ms both;
+}
+@keyframes launch-tile {
+  0%,
+  18% {
+    transform: scale(1);
+  }
+  36% {
+    transform: scale(0.93);
+  }
+  62% {
+    transform: scale(1.015);
+  }
+  70% {
+    transform: scale(1);
+  }
+  100% {
+    transform: scale(1.07);
+  }
+}
+@keyframes launch-sheen {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(190px);
+  }
+}
+@keyframes launch-out {
+  to {
+    opacity: 0;
+  }
+}
+
 /* Reduced motion: everything becomes instant; the toast countdown keeps its real duration (it is a timer). */
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -933,4 +1169,17 @@ html[data-amounts-swap] .hero-card .money {
   .hero-card {
     box-shadow: none !important;
   }
+}
+
+/* Tab bar: the newly selected icon pops once as the pill arrives (not on page load). */
+@keyframes tab-icon-pop {
+  35% {
+    transform: scale(0.86);
+  }
+  70% {
+    transform: scale(1.08);
+  }
+}
+.tab-bar[data-moved] .tab-icon-pop {
+  animation: tab-icon-pop 360ms var(--ease-out);
 }

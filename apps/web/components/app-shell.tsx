@@ -1,15 +1,18 @@
 'use client'
 
-import { BarChart3, Check, ChevronsUpDown, Eye, EyeOff, Home, ListOrdered, LogOut, Monitor, Moon, Plus, Settings, Sun, Target, Users } from 'lucide-react'
+import { BarChart3, Check, ChevronsUpDown, Download, Eye, EyeOff, Home, ListOrdered, LogOut, Monitor, Moon, Plus, Settings, Sun, Target, Users } from 'lucide-react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { useInstallAction } from '@/components/pwa/install'
 import { useQuickLog } from '@/components/quick-log/quick-log'
 import { SyncStatus } from '@/components/sync-pill'
 import { Avatar } from '@/components/ui/avatar'
+import { BrandTile } from '@/components/ui/brand-tile'
 import { Kbd } from '@/components/ui/button'
 import { Menu, MenuItem, MenuLabel, MenuSeparator } from '@/components/ui/menu'
+import { haptic } from '@/lib/haptics'
 import { usePrivacy } from '@/lib/privacy'
 import { useProfile, useUserEmail } from '@/lib/profile'
 import { getSupabase } from '@/lib/supabase/client'
@@ -34,8 +37,13 @@ function isActive(pathname: string, href: string) {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const quickLog = useQuickLog()
+  // The tab pill starts sliding on tap (like the Android tab bar), not when the next page has rendered.
+  const [pending, setPending] = useState<{ from: string; to: string } | null>(null)
+  const [moved, setMoved] = useState(false)
+  if (pending && pending.from !== pathname) setPending(null)
+  const tabPath = pending && pending.from === pathname ? pending.to : pathname
   const side = useIndicator(pathname)
-  const tabs = useIndicator(pathname)
+  const tabs = useIndicator(tabPath)
 
   return (
     <div className="flex min-h-dvh">
@@ -89,9 +97,12 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <button
-        onClick={() => quickLog.open()}
+        onClick={() => {
+          haptic('light')
+          quickLog.open()
+        }}
         aria-label="Log money"
-        className="fixed right-4 bottom-[calc(76px+env(safe-area-inset-bottom))] z-30 grid size-14 place-items-center rounded-[18px] bg-brand text-brand-fg shadow-[0_8px_24px_-4px_rgb(0_0_0/0.35),0_2px_6px_rgb(0_0_0/0.15)] transition-transform duration-150 active:scale-95 md:hidden print:hidden"
+        className="fab fixed right-4 bottom-[calc(76px+env(safe-area-inset-bottom))] z-30 grid size-14 place-items-center rounded-[18px] bg-brand text-brand-fg shadow-[0_8px_24px_-4px_rgb(0_0_0/0.35),0_2px_6px_rgb(0_0_0/0.15)] transition-transform duration-150 active:scale-95 md:hidden print:hidden"
       >
         <Plus className="size-6" strokeWidth={2.2} />
       </button>
@@ -100,27 +111,34 @@ export function AppShell({ children }: { children: ReactNode }) {
       <nav
         ref={tabs.nav}
         aria-label="Main"
-        className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border bg-page/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md backdrop-saturate-150 md:hidden"
+        data-moved={moved || undefined}
+        className="tab-bar fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border bg-page/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md backdrop-saturate-150 md:hidden"
       >
         <span
           ref={tabs.indicator}
           aria-hidden
-          className="nav-indicator pointer-events-none absolute top-0 left-0 rounded-full bg-surface-muted opacity-0 shadow-[inset_0_0_0_1px_var(--border)]"
+          className="nav-indicator pointer-events-none absolute top-0 left-0 rounded-full bg-border opacity-0 dark:bg-surface-muted"
         />
         {NAV.map(({ href, label, icon: Icon }) => {
-          const active = isActive(pathname, href)
+          const active = isActive(tabPath, href)
           return (
             <Link
               key={href}
               href={href}
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || isActive(pathname, href)) return
+                haptic('selection')
+                setPending({ from: pathname, to: href })
+                setMoved(true)
+              }}
               aria-current={active ? 'page' : undefined}
               className={cn(
                 'relative flex h-16 flex-col items-center justify-center gap-1 text-[11px] transition-colors duration-200 active:[&>span]:scale-90',
                 active ? 'font-semibold text-text' : 'text-text-faint',
               )}
             >
-              <span data-indicator-anchor className="grid h-7 w-12 place-items-center rounded-full transition-transform duration-150 ease-out">
-                <Icon className={cn('size-[20px] transition-transform duration-300 ease-[var(--ease-spring)]', active && 'scale-105')} strokeWidth={active ? 2.2 : 1.8} />
+              <span data-indicator-anchor className="grid h-[30px] w-14 place-items-center rounded-full transition-transform duration-150 ease-out">
+                <Icon className={cn('size-[20px]', active && 'tab-icon-pop')} strokeWidth={active ? 2.2 : 1.8} />
               </span>
               {label}
             </Link>
@@ -132,17 +150,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 function Logo({ small }: { small?: boolean }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        'grid place-items-center bg-brand font-bold text-brand-fg shadow-[inset_0_1px_0_rgb(255_255_255/0.12)]',
-        small ? 'size-7 rounded-[9px] text-[13px]' : 'size-8 rounded-[10px] text-[14px]',
-      )}
-    >
-      H
-    </span>
-  )
+  return <BrandTile className={cn('shadow-[0_1px_2px_rgb(0_0_0/0.12)]', small ? 'size-7 rounded-[9px]' : 'size-8 rounded-[10px]')} />
 }
 
 function NavLink({ href, label, icon: Icon, active }: { href: string; label: string; icon: typeof Home; active: boolean }) {
@@ -219,6 +227,7 @@ function AccountMenu({ variant }: { variant: 'sidebar' | 'header' }) {
   const mounted = useSyncExternalStore(subscribe, () => true, () => false)
   const name = displayName || email?.split('@')[0] || 'You'
 
+  const install = useInstallAction()
   const signOut = async () => {
     await getSupabase().auth.signOut()
     router.replace('/sign-in')
@@ -242,6 +251,11 @@ function AccountMenu({ variant }: { variant: 'sidebar' | 'header' }) {
       <MenuItem icon={hidden ? <Eye /> : <EyeOff />} onSelect={toggle}>
         {hidden ? 'Show amounts' : 'Hide amounts'}
       </MenuItem>
+      {install && (
+        <MenuItem icon={<Download />} onSelect={install}>
+          Install Hisab
+        </MenuItem>
+      )}
       <MenuSeparator />
       <MenuLabel>Appearance</MenuLabel>
       {THEMES.map((t) => (
@@ -259,6 +273,7 @@ function AccountMenu({ variant }: { variant: 'sidebar' | 'header' }) {
   if (variant === 'header')
     return (
       <Menu
+        title="Account and settings"
         trigger={(p) => (
           <button {...p} aria-label="Account and settings" className="grid size-9 place-items-center rounded-full">
             <Avatar name={name} size="sm" />

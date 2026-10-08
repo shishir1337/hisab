@@ -66,6 +66,10 @@ export function SignInForm() {
 
   useEffect(() => {
     if (state.step === 'done') {
+      // Lets the app offer "Add to Home Screen" on iPhone right after the first sign-in.
+      try {
+        sessionStorage.setItem('hisab:just-signed-in', '1')
+      } catch {}
       router.replace(safeNextPath(next))
       router.refresh()
     }

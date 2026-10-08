@@ -7,6 +7,7 @@ import { Check, Plus, SkipForward, Sparkles, Target } from 'lucide-react'
 import { useRef } from 'react'
 import { toast } from '@/components/ui/toaster'
 import { BalanceHero } from '@/components/balance-hero'
+import { InstallCard } from '@/components/pwa/install'
 import { Money } from '@/components/money'
 import { useQuickLog } from '@/components/quick-log/quick-log'
 import { Button, Kbd } from '@/components/ui/button'
@@ -48,6 +49,7 @@ export function Dashboard() {
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1.12fr)_minmax(0,1fr)] lg:gap-6">
       <div className="flex min-w-0 flex-col gap-5 lg:gap-6">
+        <InstallCard />
         <BalanceHero />
         {due.length > 0 && <DueList items={due} today={today} />}
         <TodayList today={today} />

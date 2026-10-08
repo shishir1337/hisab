@@ -1,5 +1,6 @@
 'use client'
 
+import { haptic } from '@/lib/haptics'
 import { cn } from '@/lib/utils'
 
 export function Switch({
@@ -26,7 +27,10 @@ export function Switch({
       aria-label={label}
       aria-describedby={describedBy}
       disabled={disabled}
-      onClick={() => onCheckedChange(!checked)}
+      onClick={() => {
+        haptic('selection')
+        onCheckedChange(!checked)
+      }}
       className={cn(
         'relative inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 disabled:opacity-40',
         checked ? 'bg-brand' : 'bg-border dark:bg-[#2c2d31]',

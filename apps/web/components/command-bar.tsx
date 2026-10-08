@@ -52,7 +52,7 @@ export function CommandBar() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent title="Command" hideClose hideHeader className="max-w-[560px] overflow-hidden p-0 md:p-0">
+        <DialogContent title="Command" variant="center" hideClose hideHeader className="max-w-[560px] overflow-hidden p-0 md:p-0">
           <Command label="Command bar" loop className="flex flex-col">
             <div className="flex items-center gap-3 border-b border-border px-5">
               <Search className="size-[18px] shrink-0 text-text-faint" aria-hidden />

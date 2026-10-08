@@ -3,7 +3,7 @@ import { Suspense } from 'react'
 import { BrandMark, BrandPanel } from './brand-panel'
 import { SignInForm } from './sign-in-form'
 
-export const metadata: Metadata = { title: 'Sign in' }
+export const metadata: Metadata = { title: 'Sign in', robots: { index: true, follow: false } }
 
 export default function SignInPage() {
   return (

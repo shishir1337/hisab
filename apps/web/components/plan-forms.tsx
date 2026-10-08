@@ -223,7 +223,7 @@ function ChipGroup({
 
 function Footer({ children }: { children: ReactNode }) {
   return (
-    <div className="sticky -bottom-5 z-10 -mx-5 -mb-5 flex flex-col gap-2 bg-surface px-5 pt-1 pb-5 md:-bottom-6 md:-mx-6 md:-mb-6 md:px-6 md:pb-6">
+    <div className="sheet-footer sticky -bottom-5 z-10 -mx-5 -mb-5 flex flex-col gap-2 bg-surface px-5 pt-1 pb-5 md:-bottom-6 md:-mx-6 md:-mb-6 md:px-6 md:pb-6">
       {children}
     </div>
   )
