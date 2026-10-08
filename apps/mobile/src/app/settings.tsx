@@ -17,6 +17,7 @@ import { cancelOwnNotifications } from '@/lib/notifications'
 import { usePrefs } from '@/lib/prefs'
 import { useProfile } from '@/lib/profile'
 import { useSession } from '@/lib/session'
+import { signOutOfGoogle } from '@/lib/google-auth'
 import { supabase } from '@/lib/supabase'
 import { useTheme, type ThemePreference } from '@/lib/theme'
 import { useToast } from '@/lib/undo'
@@ -50,6 +51,7 @@ export default function SettingsScreen() {
           return toast({ message: 'Couldn’t remove the data from this phone. You’re still signed in.' })
         }
       }
+      await signOutOfGoogle()
       const { error } = await supabase.auth.signOut()
       if (error) await supabase.auth.signOut({ scope: 'local' })
     } finally {
