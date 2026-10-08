@@ -3,8 +3,10 @@ import { markEmiPaid, postOccurrence, softDeleteTransaction } from '@hisab/db'
 import { usePowerSync } from '@powersync/react'
 import { router } from 'expo-router'
 import { Check } from 'lucide-react-native'
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ActivityIndicator, Text, View } from 'react-native'
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated'
+import { duration, easing, useMotion } from '@/lib/motion'
 import type { DueItem } from '@/features/plan/use-due'
 import { useProfile } from '@/lib/profile'
 import { useTheme } from '@/lib/theme'
@@ -145,11 +147,23 @@ function DueRow({ item, today }: { item: DueItem; today: string }) {
   )
 }
 
+/** Thin progress bar; fills from empty on mount and eases to a new value when it changes. */
 export function ProgressBar({ ratio, color, height = 6 }: { ratio: number; color?: string; height?: number }) {
   const { colors } = useTheme()
+  const { reduced } = useMotion()
+  const target = Math.min(1, Math.max(0, ratio))
+  const fill = useSharedValue(reduced ? target : 0)
+  useEffect(() => {
+    fill.value = reduced ? target : withTiming(target, { duration: duration.count, easing: easing.out })
+  }, [target, reduced, fill])
+  const bar = useAnimatedStyle(() => ({ width: `${fill.value * 100}%` }))
   return (
-    <View style={{ marginTop: 10, height, overflow: 'hidden', borderRadius: height / 2, backgroundColor: colors.surfaceMuted }}>
-      <View style={{ width: `${Math.min(100, Math.max(0, ratio * 100))}%`, height: '100%', backgroundColor: color ?? colors.brand, borderRadius: height / 2 }} />
+    <View
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: 100, now: Math.round(target * 100) }}
+      style={{ marginTop: 10, height, overflow: 'hidden', borderRadius: height / 2, backgroundColor: colors.surfaceMuted }}
+    >
+      <Animated.View style={[{ height: '100%', backgroundColor: color ?? colors.brand, borderRadius: height / 2 }, bar]} />
     </View>
   )
 }

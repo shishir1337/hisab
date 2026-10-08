@@ -1,7 +1,7 @@
 import { formatMoney, type FormatMoneyOptions } from '@hisab/core'
 import { tokens } from '@hisab/tokens'
 import { Text, type TextStyle } from 'react-native'
-import { usePrivacy } from '@/lib/privacy'
+import { MASK, usePrivacy } from '@/lib/privacy'
 
 interface MoneyProps extends FormatMoneyOptions {
   minor: number
@@ -29,7 +29,8 @@ export function Money({ minor, currency, size, weight = '600', color, hideCode, 
             {f.code}{' '}
           </Text>
         )}
-        ••••
+        {/* Smaller bullets sit on the code's optical centre instead of floating above it. */}
+        <Text style={{ fontSize: size * 0.74, letterSpacing: size * 0.08 }}>{MASK}</Text>
       </Text>
     )
   }

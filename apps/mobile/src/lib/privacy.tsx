@@ -1,6 +1,6 @@
 import { saveProfile } from '@hisab/db'
 import { usePowerSync } from '@powersync/react'
-import { createContext, use, useCallback, useMemo, type ReactNode } from 'react'
+import { createContext, use, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useProfile } from './profile'
 import { useToast } from './undo'
 
@@ -20,14 +20,22 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
   const db = usePowerSync()
   const toast = useToast()
   const { userId, hideAmounts } = useProfile()
+  // Flip at once on tap; the stored value catches up a moment later (and wins if the save fails).
+  const [pending, setPending] = useState<boolean | null>(null)
+  useEffect(() => setPending(null), [hideAmounts])
   const toggle = useCallback(() => {
     if (!userId) return
+    setPending((p) => !(p ?? hideAmounts))
     // Read the stored value, not the rendered one, so two quick taps flip it twice.
     void db
       .getOptional<{ hide_amounts: number | null }>('select hide_amounts from profiles where id = ?', [userId])
       .then((r) => saveProfile(db, userId, { hide_amounts: !r?.hide_amounts }))
-      .catch(() => toast({ message: 'Couldn’t change that. Please try again.' }))
-  }, [db, userId, toast])
-  const value = useMemo(() => ({ hidden: hideAmounts, toggle }), [hideAmounts, toggle])
+      .catch(() => {
+        setPending(null)
+        toast({ message: 'Couldn’t change that. Please try again.', kind: 'error' })
+      })
+  }, [db, userId, toast, hideAmounts])
+  const hidden = pending ?? hideAmounts
+  const value = useMemo(() => ({ hidden, toggle }), [hidden, toggle])
   return <PrivacyContext value={value}>{children}</PrivacyContext>
 }
