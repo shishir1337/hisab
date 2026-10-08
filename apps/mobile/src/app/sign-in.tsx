@@ -1,30 +1,60 @@
 import { authFormReducer, initialAuthForm, OTP_LENGTH } from '@hisab/core'
 import * as Linking from 'expo-linking'
 import { ArrowLeft, Mail } from 'lucide-react-native'
-import { useEffect, useReducer, useRef, useState } from 'react'
-import Svg, { Path } from 'react-native-svg'
-import { KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native'
+import { useEffect, useReducer, useRef, useState, type ReactNode } from 'react'
+import { KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, useWindowDimensions, View } from 'react-native'
+import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition, type EntryAnimationsValues, withTiming } from 'react-native-reanimated'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { BrandMark } from '@/components/brand'
+import Svg, { Path } from 'react-native-svg'
+import { BrandLockup } from '@/components/brand'
 import { Button } from '@/components/button'
+import { OtpInput } from '@/components/otp-input'
 import { Press } from '@/components/press'
+import { SignInHero } from '@/components/sign-in-hero'
+import { useFirstRun } from '@/lib/first-run'
 import { googleSignInAvailable, signInWithGoogle } from '@/lib/google-auth'
+import { duration, easing, haptic, useMotion } from '@/lib/motion'
 import { supabase } from '@/lib/supabase'
 import { useTheme } from '@/lib/theme'
 
 /** Supabase's hosted default allows one code email per address per 60 s. */
 const RESEND_SECONDS = 60
 
+/**
+ * Dev only: addresses on the reserved `.test` TLD skip the network, so the code step (digit boxes, wrong-code
+ * shake, resend timer) can be exercised without sending real email. Any code is "wrong".
+ */
+const isDevFake = (email: string) => __DEV__ && email.endsWith('@example.test')
+
+/** Each step's content slides up into place; the previous one fades. */
+const stepIn = (_v: EntryAnimationsValues) => {
+  'worklet'
+  return {
+    initialValues: { opacity: 0, transform: [{ translateY: 14 }] },
+    animations: {
+      opacity: withTiming(1, { duration: duration.base, easing: easing.out }),
+      transform: [{ translateY: withTiming(0, { duration: duration.slow, easing: easing.out }) }],
+    },
+  }
+}
+
 export default function SignInScreen() {
   const [state, dispatch] = useReducer(authFormReducer, initialAuthForm)
   const [cooldown, setCooldown] = useState(0)
   const [emailFocused, setEmailFocused] = useState(false)
   const { colors } = useTheme()
+  const { reduced } = useMotion()
   const insets = useSafeAreaInsets()
+  const { width } = useWindowDimensions()
   const codeRef = useRef<TextInput>(null)
   const [google, setGoogle] = useState<'idle' | 'busy'>('idle')
   const [googleError, setGoogleError] = useState<string | null>(null)
   const showGoogle = googleSignInAvailable()
+  // Choose a method first (Google or email); without Google, go straight to the email field.
+  const [method, setMethod] = useState<'choose' | 'email'>(showGoogle ? 'choose' : 'email')
+  const [shakeKey, setShakeKey] = useState(0)
+  const { resetWelcome } = useFirstRun()
+
   const continueWithGoogle = async () => {
     if (google === 'busy') return
     setGoogle('busy')
@@ -37,6 +67,13 @@ export default function SignInScreen() {
 
   useEffect(() => {
     if (state.status === 'sending') {
+      if (isDevFake(state.email)) {
+        const t = setTimeout(() => {
+          dispatch({ type: 'sent' })
+          setCooldown(RESEND_SECONDS)
+        }, 400)
+        return () => clearTimeout(t)
+      }
       supabase.auth.signInWithOtp({ email: state.email, options: { shouldCreateUser: true, emailRedirectTo: Linking.createURL('auth-callback') } }).then(({ error }) => {
         if (error) dispatch({ type: 'sendFailed', error: friendlyError(error.message) })
         else {
@@ -46,6 +83,10 @@ export default function SignInScreen() {
       })
     }
     if (state.status === 'verifying') {
+      if (isDevFake(state.email)) {
+        const t = setTimeout(() => dispatch({ type: 'verifyFailed', error: friendlyError('Token has expired or is invalid') }), 500)
+        return () => clearTimeout(t)
+      }
       supabase.auth.verifyOtp({ email: state.email, token: state.code, type: 'email' }).then(({ error }) => {
         // On success the session listener swaps the protected stack to the tabs.
         if (error) dispatch({ type: 'verifyFailed', error: friendlyError(error.message) })
@@ -59,6 +100,13 @@ export default function SignInScreen() {
     if (state.step === 'code' && state.status === 'idle') codeRef.current?.focus()
   }, [state.step, state.status])
 
+  // A rejected code (verifying → idle with an error) shakes the boxes, with a warning haptic.
+  const prevStatus = useRef(state.status)
+  useEffect(() => {
+    if (prevStatus.current === 'verifying' && state.status === 'idle' && state.error) setShakeKey((k) => k + 1)
+    prevStatus.current = state.status
+  }, [state.status, state.error])
+
   useEffect(() => {
     if (cooldown <= 0) return
     const t = setTimeout(() => setCooldown((c) => c - 1), 1000)
@@ -71,151 +119,238 @@ export default function SignInScreen() {
     }
   }, [state.code, state.step, state.status, state.error])
 
+  const choosing = state.step === 'email' && method === 'choose'
+  const stepKey = state.step === 'code' ? 'code' : method
+  const layout = reduced ? undefined : LinearTransition.duration(duration.slow).easing(easing.out)
+
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, backgroundColor: colors.page }}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ flexGrow: 1, paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24, paddingHorizontal: 24 }}
+        contentContainerStyle={{ flexGrow: 1, paddingTop: insets.top + 14, paddingBottom: insets.bottom + 16, paddingHorizontal: 24 }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <BrandMark size={36} />
-          <Text style={{ color: colors.text, fontWeight: '600', fontSize: 18, letterSpacing: -0.3 }}>Hisab</Text>
+        <View style={{ height: 44, flexDirection: 'row', alignItems: 'center' }}>
+          <Press
+            accessibilityRole="header"
+            accessibilityLabel="Hisab"
+            feedback="none"
+            focusable={false}
+            // Dev only: long-press the logo to see the walkthrough and long intro again on next launch.
+            onLongPress={__DEV__ ? () => (haptic.medium(), resetWelcome()) : undefined}
+          >
+            <BrandLockup size={28} />
+          </Press>
         </View>
 
-        <View style={{ flex: 1, justifyContent: 'center', paddingVertical: 32 }}>
-          {state.step === 'email' ? (
-            <>
-              <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 28, fontWeight: '700', letterSpacing: -0.6 }}>
-                Sign in to Hisab
-              </Text>
-              <Text style={{ color: colors.textMuted, fontSize: 15, marginTop: 6, lineHeight: 21 }}>New here? The same step creates your account.</Text>
-              {showGoogle && (
-                <>
-                  <View style={{ marginTop: 28 }}>
-                    <Button variant="secondary" icon={<GoogleMark />} loading={google === 'busy'} onPress={() => void continueWithGoogle()}>
-                      Continue with Google
-                    </Button>
-                  </View>
-                  {googleError && <ErrorText message={googleError} />}
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: googleError ? 4 : 22 }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                    <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-                    <Text style={{ color: colors.textFaint, fontSize: 12.5 }}>or</Text>
-                    <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
-                  </View>
-                </>
-              )}
-              <Text style={{ color: colors.text, fontSize: 13.5, fontWeight: '600', marginTop: showGoogle ? 22 : 28, marginBottom: 8 }}>Email</Text>
-              <TextInput
-                accessibilityLabel="Email"
-                autoFocus={!showGoogle}
-                autoCapitalize="none"
-                autoComplete="email"
-                keyboardType="email-address"
-                textContentType="emailAddress"
-                placeholder="you@example.com"
-                placeholderTextColor={colors.textFaint}
-                value={state.email}
-                editable={state.status === 'idle'}
-                onFocus={() => setEmailFocused(true)}
-                onBlur={() => setEmailFocused(false)}
-                onChangeText={(email) => dispatch({ type: 'setEmail', email })}
-                onSubmitEditing={() => dispatch({ type: 'submitEmail' })}
-                returnKeyType="go"
-                style={{
-                  height: 52,
-                  borderRadius: 14,
-                  borderWidth: 1,
-                  paddingHorizontal: 16,
-                  backgroundColor: colors.surface,
-                  color: colors.text,
-                  fontSize: 16,
-                  borderColor: state.error ? colors.danger : emailFocused ? colors.textFaint : colors.border,
-                }}
+        {choosing && (
+          <Animated.View entering={reduced ? undefined : FadeIn.duration(duration.slow)} exiting={reduced ? undefined : FadeOut.duration(duration.fast)} style={{ flex: 1, justifyContent: 'center', minHeight: 300 }}>
+            <SignInHero width={width - 48} />
+          </Animated.View>
+        )}
+
+        <Animated.View layout={layout} style={{ flex: choosing ? 0 : 1, justifyContent: choosing ? 'flex-end' : 'flex-start', paddingTop: choosing ? 8 : 28 }}>
+          <Animated.View key={stepKey} entering={reduced ? FadeIn.duration(duration.fast) : stepIn}>
+            {state.step === 'code' ? (
+              <CodeStep
+                email={state.email}
+                code={state.code}
+                error={state.error}
+                status={state.status}
+                cooldown={cooldown}
+                shakeKey={shakeKey}
+                codeRef={codeRef}
+                onCode={(code) => dispatch({ type: 'setCode', code })}
+                onVerify={() => dispatch({ type: 'submitCode' })}
+                onResend={() => dispatch({ type: 'resend' })}
+                onBack={() => dispatch({ type: 'back' })}
               />
-              <ErrorText message={state.error} />
-              <Button onPress={() => dispatch({ type: 'submitEmail' })} loading={state.status === 'sending'}>
-                Continue with email
-              </Button>
-              <View style={{ marginTop: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <Mail size={14} color={colors.textFaint} />
-                <Text style={{ color: colors.textFaint, fontSize: 13 }}>We’ll email you a 6-digit code. No password.</Text>
-              </View>
-            </>
-          ) : (
-            <>
-              <Press
-                accessibilityRole="button"
-                onPress={() => dispatch({ type: 'back' })}
-                hitSlop={10}
-                style={{ marginLeft: -2, marginBottom: 20, flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4 }}
-              >
-                <ArrowLeft size={17} color={colors.textMuted} />
-                <Text style={{ color: colors.textMuted, fontSize: 14 }}>Use a different email</Text>
-              </Press>
-              <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 28, fontWeight: '700', letterSpacing: -0.6 }}>
-                Check your email
-              </Text>
-              <Text style={{ color: colors.textMuted, fontSize: 15, marginTop: 6, lineHeight: 21 }}>
-                Enter the code we sent to <Text style={{ color: colors.text, fontWeight: '600' }}>{state.email}</Text>, or open the link in that email on this phone.
-              </Text>
-
-              <Pressable accessibilityElementsHidden onPress={() => codeRef.current?.focus()} style={{ marginTop: 28 }}>
-                <TextInput
-                  ref={codeRef}
-                  accessibilityLabel="6-digit code"
-                  autoFocus
-                  keyboardType="number-pad"
-                  textContentType="oneTimeCode"
-                  autoComplete="one-time-code"
-                  maxLength={OTP_LENGTH}
-                  value={state.code}
-                  editable={state.status === 'idle'}
-                  onChangeText={(code) => dispatch({ type: 'setCode', code })}
-                  style={{ position: 'absolute', opacity: 0, width: 1, height: 1 }}
-                />
-                <View style={{ flexDirection: 'row', gap: 8 }} pointerEvents="none">
-                  {Array.from({ length: OTP_LENGTH }, (_, i) => {
-                    const active = state.status === 'idle' && i === Math.min(state.code.length, OTP_LENGTH - 1)
-                    return (
-                      <View
-                        key={i}
-                        style={{
-                          height: 58,
-                          flex: 1,
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: 14,
-                          borderWidth: active ? 1.5 : 1,
-                          backgroundColor: colors.surface,
-                          borderColor: state.error ? colors.danger : active ? colors.text : colors.border,
-                        }}
-                      >
-                        <Text style={{ color: colors.text, fontSize: 24, fontWeight: '600', fontVariant: ['tabular-nums'] }}>{state.code[i] ?? ''}</Text>
-                      </View>
-                    )
-                  })}
+            ) : method === 'choose' ? (
+              <>
+                <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 30, fontWeight: '700', letterSpacing: -0.9, lineHeight: 35 }}>
+                  Know where your{'\n'}money goes
+                </Text>
+                <Text style={{ color: colors.textMuted, fontSize: 15.5, marginTop: 8, lineHeight: 22 }}>Spending, bills and money you lend, in one calm place.</Text>
+                <View style={{ marginTop: 26, gap: 10 }}>
+                  <BigButton
+                    primary
+                    busy={google === 'busy'}
+                    icon={<GoogleMark />}
+                    label="Continue with Google"
+                    onPress={() => void continueWithGoogle()}
+                  />
+                  {googleError ? <ErrorText message={googleError} /> : null}
+                  <BigButton icon={<Mail size={19} color={colors.text} strokeWidth={1.9} />} label="Continue with email" onPress={() => setMethod('email')} />
                 </View>
-              </Pressable>
-              <ErrorText message={state.error} />
-              <Button onPress={() => dispatch({ type: 'submitCode' })} loading={state.status === 'verifying'}>
-                Verify
-              </Button>
-              <View style={{ marginTop: 16, alignItems: 'center' }}>
-                {cooldown > 0 ? (
-                  <Text style={{ color: colors.textMuted, fontSize: 13.5, fontVariant: ['tabular-nums'], paddingVertical: 12 }}>Resend code in {cooldown}s</Text>
-                ) : (
-                  <Press accessibilityRole="button" onPress={() => dispatch({ type: 'resend' })} style={{ paddingVertical: 12, paddingHorizontal: 16 }}>
-                    <Text style={{ color: colors.text, fontSize: 13.5, fontWeight: '600' }}>Resend code</Text>
-                  </Press>
-                )}
-              </View>
-            </>
-          )}
-        </View>
+              </>
+            ) : (
+              <>
+                {showGoogle && <BackLink label="Other ways to sign in" onPress={() => setMethod('choose')} />}
+                <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 28, fontWeight: '700', letterSpacing: -0.7 }}>
+                  {showGoogle ? 'What’s your email?' : 'Sign in to Hisab'}
+                </Text>
+                <Text style={{ color: colors.textMuted, fontSize: 15, marginTop: 6, lineHeight: 21 }}>
+                  We’ll email you a 6-digit code. No password. New here? The same step creates your account.
+                </Text>
+                <View
+                  style={{
+                    marginTop: 24,
+                    height: 56,
+                    borderRadius: 16,
+                    borderWidth: emailFocused ? 1.5 : 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingLeft: 16,
+                    backgroundColor: colors.surface,
+                    borderColor: state.error ? colors.danger : emailFocused ? colors.text : colors.border,
+                  }}
+                >
+                  <Mail size={18} color={emailFocused ? colors.text : colors.textFaint} strokeWidth={1.9} />
+                  <TextInput
+                    accessibilityLabel="Email"
+                    autoFocus
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    keyboardType="email-address"
+                    textContentType="emailAddress"
+                    placeholder="you@example.com"
+                    placeholderTextColor={colors.textFaint}
+                    value={state.email}
+                    editable={state.status === 'idle'}
+                    onFocus={() => setEmailFocused(true)}
+                    onBlur={() => setEmailFocused(false)}
+                    onChangeText={(email) => dispatch({ type: 'setEmail', email })}
+                    onSubmitEditing={() => dispatch({ type: 'submitEmail' })}
+                    returnKeyType="go"
+                    style={{ flex: 1, height: '100%', paddingHorizontal: 12, color: colors.text, fontSize: 16 }}
+                  />
+                </View>
+                <ErrorText message={state.error} />
+                <Button onPress={() => dispatch({ type: 'submitEmail' })} loading={state.status === 'sending'}>
+                  Send code
+                </Button>
+              </>
+            )}
+          </Animated.View>
+        </Animated.View>
 
-        <Text style={{ color: colors.textFaint, fontSize: 12.5, textAlign: 'center' }}>Know where your money goes — without the month-end struggle.</Text>
+        <Text style={{ color: colors.textFaint, fontSize: 12, lineHeight: 17, textAlign: 'center', marginTop: 22 }}>
+          By continuing you agree to the <Text style={{ color: colors.textMuted, fontWeight: '600' }}>Terms</Text> and{' '}
+          <Text style={{ color: colors.textMuted, fontWeight: '600' }}>Privacy Policy</Text>.
+        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
+  )
+}
+
+function CodeStep({
+  email,
+  code,
+  error,
+  status,
+  cooldown,
+  shakeKey,
+  codeRef,
+  onCode,
+  onVerify,
+  onResend,
+  onBack,
+}: {
+  email: string
+  code: string
+  error: string | null
+  status: 'idle' | 'sending' | 'verifying'
+  cooldown: number
+  shakeKey: number
+  codeRef: React.RefObject<TextInput | null>
+  onCode: (c: string) => void
+  onVerify: () => void
+  onResend: () => void
+  onBack: () => void
+}) {
+  const { colors } = useTheme()
+  const mm = Math.floor(cooldown / 60)
+  const ss = String(cooldown % 60).padStart(2, '0')
+  return (
+    <>
+      <BackLink label="Use a different email" onPress={onBack} />
+      <Text accessibilityRole="header" style={{ color: colors.text, fontSize: 28, fontWeight: '700', letterSpacing: -0.7 }}>
+        Check your email
+      </Text>
+      <Text style={{ color: colors.textMuted, fontSize: 15, marginTop: 6, lineHeight: 21 }}>
+        Enter the code we sent to <Text style={{ color: colors.text, fontWeight: '600' }}>{email}</Text>, or open the link in that email on this phone.
+      </Text>
+      <View style={{ marginTop: 24 }}>
+        <OtpInput value={code} length={OTP_LENGTH} onChange={onCode} editable={status === 'idle'} invalid={Boolean(error)} shakeKey={shakeKey} inputRef={codeRef} />
+      </View>
+      <ErrorText message={error} />
+      <Button onPress={onVerify} loading={status === 'verifying'}>
+        Verify
+      </Button>
+      <View style={{ marginTop: 10, alignItems: 'center', minHeight: 44, justifyContent: 'center' }}>
+        {cooldown > 0 ? (
+          <Text style={{ color: colors.textMuted, fontSize: 13.5, fontVariant: ['tabular-nums'] }}>
+            Didn’t get it? Resend in {mm}:{ss}
+          </Text>
+        ) : (
+          <Animated.View entering={FadeInDown.duration(duration.base)}>
+            <Press accessibilityRole="button" onPress={onResend} disabled={status !== 'idle'} style={{ paddingVertical: 12, paddingHorizontal: 16 }}>
+              <Text style={{ color: colors.text, fontSize: 13.5, fontWeight: '600' }}>{status === 'sending' ? 'Sending…' : 'Resend code'}</Text>
+            </Press>
+          </Animated.View>
+        )}
+      </View>
+    </>
+  )
+}
+
+function BackLink({ label, onPress }: { label: string; onPress: () => void }) {
+  const { colors } = useTheme()
+  return (
+    <Press
+      accessibilityRole="button"
+      onPress={onPress}
+      hitSlop={10}
+      style={{ marginLeft: -2, marginBottom: 18, flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4 }}
+    >
+      <ArrowLeft size={17} color={colors.textMuted} />
+      <Text style={{ color: colors.textMuted, fontSize: 14 }}>{label}</Text>
+    </Press>
+  )
+}
+
+/** Tall method button: ink primary (Google) or paper secondary (email). */
+function BigButton({ label, icon, onPress, primary, busy }: { label: string; icon: ReactNode; onPress: () => void; primary?: boolean; busy?: boolean }) {
+  const { colors } = useTheme()
+  return (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ busy, disabled: busy }}
+      disabled={busy}
+      haptic="selection"
+      feedback="scale"
+      onPress={onPress}
+      style={{
+        height: 58,
+        borderRadius: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 12,
+        backgroundColor: primary ? colors.brand : colors.surface,
+        borderWidth: primary ? 0 : 1,
+        borderColor: colors.border,
+        opacity: busy ? 0.7 : 1,
+      }}
+    >
+      {primary ? (
+        // Google's mark sits on a white disc, per its branding guidance for dark buttons.
+        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' }}>{icon}</View>
+      ) : (
+        icon
+      )}
+      <Text style={{ color: primary ? colors.brandFg : colors.text, fontSize: 16, fontWeight: '600', letterSpacing: -0.1 }}>{busy ? 'Opening Google…' : label}</Text>
+    </Press>
   )
 }
 
