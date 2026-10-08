@@ -4,8 +4,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { getServerSupabase } from '@/lib/supabase/server'
 
 /**
- * Completes sign-in from the emailed link, so login works even while the Supabase email template
- * still sends a link instead of the 6-digit code. Handles both the PKCE `code` and `token_hash` forms.
+ * Completes sign-in from Google (OAuth `code`) and from the emailed link (PKCE `code` or `token_hash`),
+ * so login works even while the Supabase email template still sends a link instead of the 6-digit code.
  */
 export async function GET(request: NextRequest) {
   const url = request.nextUrl
