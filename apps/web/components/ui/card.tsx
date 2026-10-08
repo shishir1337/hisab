@@ -45,10 +45,25 @@ export function CardLink({ href, children }: { href: string; children: ReactNode
 }
 
 /** Honest empty state: what's missing, and what to do about it. */
-export function EmptyState({ icon, title, children, action, className }: { icon?: ReactNode; title: string; children?: ReactNode; action?: ReactNode; className?: string }) {
+export function EmptyState({
+  icon,
+  illustration,
+  title,
+  children,
+  action,
+  className,
+}: {
+  icon?: ReactNode
+  /** A small drawing (components/ui/illustrations) in place of the icon. */
+  illustration?: ReactNode
+  title: string
+  children?: ReactNode
+  action?: ReactNode
+  className?: string
+}) {
   return (
-    <div className={cn('flex flex-col items-center px-4 py-8 text-center', className)}>
-      {icon && <div className="mb-3 grid size-11 place-items-center rounded-full bg-surface-muted text-[20px] text-text-muted [&_svg]:size-5">{icon}</div>}
+    <div className={cn('empty-state flex flex-col items-center px-4 py-8 text-center', className)}>
+      {illustration ? <div className="empty-art mb-3">{illustration}</div> : icon && <div className="mb-3 grid size-11 place-items-center rounded-full bg-surface-muted text-[20px] text-text-muted [&_svg]:size-5">{icon}</div>}
       <p className="text-[14px] font-semibold">{title}</p>
       {children && <p className="mt-1 max-w-[34ch] text-[13px] leading-5 text-text-muted">{children}</p>}
       {action && <div className="mt-4">{action}</div>}

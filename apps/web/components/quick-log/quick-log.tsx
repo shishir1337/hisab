@@ -18,13 +18,14 @@ import {
   type TransactionView,
 } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
-import { CalendarDays, Search, Trash2 } from 'lucide-react'
+import { CalendarDays, Check, Search, Trash2 } from 'lucide-react'
 import { createContext, use, useCallback, useEffect, useMemo, useReducer, useRef, useState, type ReactNode } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/components/ui/toaster'
 import { Button, Kbd } from '@/components/ui/button'
 import { Chip, Select } from '@/components/ui/chip'
 import { Dialog, DialogContent, Field } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { DUR, reducedMotion, shake } from '@/lib/motion'
 import { MASK, usePrivacy } from '@/lib/privacy'
 import { useProfile, useToday } from '@/lib/profile'
 import { cn } from '@/lib/utils'
@@ -60,11 +61,10 @@ export function QuickLogProvider({ children }: { children: ReactNode }) {
     <QuickLogContext value={value}>
       {children}
       <Dialog open={state.open} onOpenChange={(o) => setState((s) => ({ ...s, open: o }))}>
-        {state.open && (
-          <DialogContent title={state.opts.edit ? 'Edit transaction' : 'Log money'}>
-            <QuickLogForm key={state.key} options={state.opts} lists={lists} onDone={() => setState((s) => ({ ...s, open: false }))} />
-          </DialogContent>
-        )}
+        {/* Always rendered: Radix mounts it while open and keeps it for the exit animation. */}
+        <DialogContent title={state.opts.edit ? 'Edit transaction' : 'Log money'}>
+          <QuickLogForm key={state.key} options={state.opts} lists={lists} onDone={() => setState((s) => ({ ...s, open: false }))} />
+        </DialogContent>
       </Dialog>
     </QuickLogContext>
   )
@@ -95,9 +95,13 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
   const [catQuery, setCatQuery] = useState('')
   const [hint, setHint] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [saved, setSaved] = useState(false)
   const [addingParty, setAddingParty] = useState(false)
   const [partyName, setPartyName] = useState('')
   const amountRef = useRef<HTMLInputElement>(null)
+  const amountBox = useRef<HTMLDivElement>(null)
+  const categoryBox = useRef<HTMLDivElement>(null)
+  const saveRef = useRef<HTMLButtonElement>(null)
   const dateRef = useRef<HTMLInputElement>(null)
   const editing = Boolean(options.edit)
 
@@ -126,25 +130,41 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
   const typed = keypadToMinor(form.keypad)
   const fxPreview = form.fx && typed !== null && /^\d{1,12}(\.\d{1,8})?$/.test(form.fx.rate) ? safeFx(typed, form.fx.rate) : null
 
+  /** Blocked: say why, and shake the part that needs attention. */
+  const block = (message: string, where: 'amount' | 'category' | 'save' = 'save') => {
+    setHint(message)
+    shake(where === 'amount' ? amountBox.current : where === 'category' ? categoryBox.current : saveRef.current)
+  }
+
   const save = async () => {
     if (busy || !lists.ready) return
-    if (amountText.trim() && !/^\d{1,10}(\.\d{1,2})?$/.test(amountText.replace(/,/g, '').trim())) return setHint('Enter an amount like 1450 or 1,450.50')
+    if (amountText.trim() && !/^\d{1,10}(\.\d{1,2})?$/.test(amountText.replace(/,/g, '').trim())) return block('Enter an amount like 1450 or 1,450.50', 'amount')
     const r = toDraft(form.accountId || form.type === 'transfer' ? form : { ...form, accountId: accounts[0]?.id ?? null }, new Date(), timeZone)
-    if (!r.ok) return setHint(MISSING[r.missing])
+    if (!r.ok) return block(MISSING[r.missing], r.missing === 'amount' || r.missing === 'rate' ? 'amount' : r.missing === 'category' ? 'category' : 'save')
     setBusy(true)
     try {
       const amount = hidden ? `${currency} ${MASK}` : formatMoney(r.draft.amount_minor, currency, { grouping }).text
       const label = `${form.type === 'transfer' ? 'Transfer' : (categories.find((c) => c.id === form.categoryId)?.name ?? '')} ${amount}`
+      let announce: () => void
       if (editing && options.edit) {
         const before = options.edit
         await updateTransaction(db, before.id, r.draft)
-        toast(`Updated · ${label}`, { action: { label: 'Undo', onClick: () => void updateTransaction(db, before.id, snapshot(before)) } })
+        announce = () => toast(`Updated · ${label}`, { action: { label: 'Undo', onClick: () => void updateTransaction(db, before.id, snapshot(before)) } })
       } else {
         const id = await createTransaction(db, userId, r.draft)
-        toast(`Saved · ${label}`, { action: { label: 'Undo', onClick: () => void softDeleteTransaction(db, id) } })
+        announce = () => toast(`Saved · ${label}`, { action: { label: 'Undo', onClick: () => void softDeleteTransaction(db, id) } })
       }
-      onDone()
+      // Save morphs into a check for a beat, then the dialog closes and the toast drops in.
+      setSaved(true)
+      setTimeout(
+        () => {
+          onDone()
+          announce()
+        },
+        reducedMotion() ? 0 : DUR.slow + 170,
+      )
     } catch (e) {
+      shake(saveRef.current)
       setHint(e instanceof ValidationError ? (e.issues[0]?.message ?? 'Check the details') : 'Couldn’t save. Try again.')
       setBusy(false)
     }
@@ -171,7 +191,7 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
           if (!lists.ready) return
           // Empty filter: Enter means "save", never "pick the first category".
           if (!catQuery.trim()) return void save()
-          if (!filtered[0]) return setHint('No category matches')
+          if (!filtered[0]) return block('No category matches', 'category')
           dispatch({ type: 'setCategory', id: filtered[0].id })
           setCatQuery('')
           setHint(null)
@@ -203,25 +223,19 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
 
       {/* Amount: the hero of the dialog. */}
       <div
+        ref={amountBox}
         onClick={() => amountRef.current?.focus()}
         className="flex cursor-text items-baseline gap-2 rounded-[16px] border border-border bg-surface-muted/40 px-4 pt-3 pb-2.5 transition-[border-color,box-shadow,background-color] duration-150 focus-within:border-text-faint focus-within:bg-surface focus-within:ring-4 focus-within:ring-brand/[0.06]"
       >
         <span className="num text-[15px] font-medium text-text-faint">{form.fx?.currency ?? currency}</span>
-        <input
+        <AmountInput
           ref={amountRef}
-          aria-label="Amount"
-          inputMode="decimal"
-          autoComplete="off"
-          placeholder="0"
           value={amountText}
-          onChange={(e) => {
-            setAmountText(e.target.value)
+          income={form.type === 'income'}
+          onChange={(v) => {
+            setAmountText(v)
             setHint(null)
           }}
-          className={cn(
-            'num h-12 w-full min-w-0 bg-transparent text-[40px] leading-none font-semibold tracking-[-0.03em] outline-none placeholder:text-text-faint/60',
-            form.type === 'income' && amountText && 'text-positive',
-          )}
         />
       </div>
       {form.fx && <p className="-mt-2 px-1 text-[12.5px] text-text-muted">{fxPreview !== null ? `= ${formatMoney(fxPreview, currency, { grouping }).text}` : 'Enter the rate you got'}</p>}
@@ -253,7 +267,7 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
           </Field>
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div ref={categoryBox} className="flex flex-col gap-2">
           <label className="flex h-10 items-center gap-2 rounded-[12px] border border-border bg-surface px-3 transition-[border-color,box-shadow] duration-150 focus-within:border-text-faint focus-within:ring-4 focus-within:ring-brand/[0.06]">
             <Search className="size-4 shrink-0 text-text-faint" aria-hidden />
             <input
@@ -435,14 +449,53 @@ function QuickLogForm({ options, lists, onDone }: { options: OpenOptions; lists:
             <Trash2 />
           </Button>
         )}
-        <Button type="submit" size="lg" className="flex-1" disabled={busy || !lists.ready}>
-          {editing ? 'Save changes' : 'Save'}
-          <Kbd inverted className="ml-1 max-md:hidden">
-            ↵
-          </Kbd>
+        <Button ref={saveRef} type="submit" size="lg" className={cn('flex-1', saved && 'disabled:opacity-100')} disabled={busy || !lists.ready}>
+          {saved ? (
+            <span key="saved" className="check-in flex items-center gap-1.5">
+              <Check className="size-[18px]!" strokeWidth={3} /> Saved
+            </span>
+          ) : (
+            <>
+              {editing ? 'Save changes' : 'Save'}
+              <Kbd inverted className="ml-1 max-md:hidden">
+                ↵
+              </Kbd>
+            </>
+          )}
         </Button>
       </div>
     </form>
+  )
+}
+
+/**
+ * The amount field. The input keeps the caret, selection and IME; its text is transparent and a mirror
+ * underneath draws the same characters, so each newly typed digit can rise in. Long amounts step the size
+ * down rather than scroll (the mirror must never drift from the input).
+ */
+function AmountInput({ ref, value, income, onChange }: { ref: React.Ref<HTMLInputElement>; value: string; income: boolean; onChange: (v: string) => void }) {
+  const size = value.length > 11 ? 'text-[26px]' : value.length > 8 ? 'text-[32px]' : 'text-[40px]'
+  const shared = cn('num leading-none font-semibold tracking-[-0.03em]', size)
+  return (
+    <span className="relative flex h-12 min-w-0 flex-1 items-center">
+      <span aria-hidden className={cn(shared, 'pointer-events-none absolute inset-y-0 left-0 flex items-center whitespace-pre', income && 'text-positive')}>
+        {[...value].map((ch, i) => (
+          <span key={`${i}:${ch}`} className="digit-in">
+            {ch}
+          </span>
+        ))}
+      </span>
+      <input
+        ref={ref}
+        aria-label="Amount"
+        inputMode="decimal"
+        autoComplete="off"
+        placeholder="0"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(shared, 'relative h-12 w-full min-w-0 bg-transparent text-transparent caret-text outline-none placeholder:text-text-faint/60 selection:bg-brand/15')}
+      />
+    </span>
   )
 }
 

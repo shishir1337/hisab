@@ -21,9 +21,9 @@ import {
   type RecurringRuleView,
 } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
-import { Check, HandCoins, Landmark, MessageCircle, Pause, Pencil, Play, Plus, Repeat, Target, Users } from 'lucide-react'
+import { Check, HandCoins, MessageCircle, Pause, Pencil, Play, Plus } from 'lucide-react'
 import { useRef, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/components/ui/toaster'
 import { BudgetList, SafeToSpend } from '@/components/dashboard'
 import { Money } from '@/components/money'
 import { cadence, LoanForm, RecurringForm } from '@/components/plan-forms'
@@ -31,10 +31,13 @@ import { Avatar } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Card, EmptyState } from '@/components/ui/card'
 import { CategoryIcon } from '@/components/ui/category-icon'
+import { BudgetArt, LoanArt, PeopleArt, RecurringArt } from '@/components/ui/illustrations'
+import { TxSkeleton } from '@/components/ui/skeleton'
 import { Select } from '@/components/ui/chip'
 import { Dialog, DialogContent, Field } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
+import { useLastDefined, useListMotion } from '@/lib/motion'
 import { MASK, usePrivacy } from '@/lib/privacy'
 import { useProfile, useToday } from '@/lib/profile'
 import { cn } from '@/lib/utils'
@@ -49,11 +52,13 @@ export function PlanView() {
   const { userId, currency, grouping, timeZone } = useProfile()
   const today = useToday(timeZone)
   const { start, end } = monthRange(today)
-  const { data: budgets } = useQuery<BudgetWithSpent>(QP.budgetsWithSpent, [start, end])
-  const { data: rules } = useQuery<RecurringRuleView>(QP.recurringRules)
+  const { data: budgets, isLoading: budgetsLoading } = useQuery<BudgetWithSpent>(QP.budgetsWithSpent, [start, end])
+  const { data: rules, isLoading: rulesLoading } = useQuery<RecurringRuleView>(QP.recurringRules)
   const { data: posted } = useQuery<{ rule_id: string; occurrence_date: string }>(QP.postedOccurrences)
   const { data: skipped } = useQuery<{ rule_id: string; occurrence_date: string }>(QP.skippedOccurrences)
-  const { data: loans } = useQuery<LoanWithPayments>(QP.loansWithPayments)
+  const { data: loans, isLoading: loansLoading } = useQuery<LoanWithPayments>(QP.loansWithPayments)
+  const rulesMotion = useListMotion<HTMLUListElement>()
+  const loansMotion = useListMotion<HTMLUListElement>()
   const done = groupOccurrences([...posted, ...skipped])
   const paying = useRef(new Set<string>())
   const overall = budgets.find((b) => !b.category_id)
@@ -63,8 +68,12 @@ export function PlanView() {
   const [loanEdit, setLoanEdit] = useState<{ id: string | null; key: number } | null>(null)
   const openRule = (id: string | null) => setRuleEdit((s) => ({ id, key: (s?.key ?? 0) + 1 }))
   const openLoan = (id: string | null) => setLoanEdit((s) => ({ id, key: (s?.key ?? 0) + 1 }))
-  const editRule = ruleEdit?.id ? rules.find((r) => r.id === ruleEdit.id) : undefined
-  const editLoan = loanEdit?.id ? loans.find((l) => l.id === loanEdit.id) : undefined
+  // What the dialogs show: the last opened item, so content stays while a dialog animates closed.
+  const ruleView = useLastDefined(ruleEdit)
+  const loanView = useLastDefined(loanEdit)
+  const budgetView = useLastDefined(editing)
+  const viewRule = ruleView?.id ? rules.find((r) => r.id === ruleView.id) : undefined
+  const viewLoan = loanView?.id ? loans.find((l) => l.id === loanView.id) : undefined
 
   return (
     <div className="grid items-start gap-5 lg:grid-cols-2 lg:gap-6">
@@ -79,9 +88,11 @@ export function PlanView() {
           )
         }
       >
-        {budgets.length === 0 ? (
+        {budgetsLoading && budgets.length === 0 ? (
+          <TxSkeleton count={2} className="-mx-2" />
+        ) : budgets.length === 0 ? (
           <EmptyState
-            icon={<Target />}
+            illustration={<BudgetArt />}
             title="No budgets yet"
             action={
               <Button size="sm" onClick={() => setEditing('new')}>
@@ -111,9 +122,11 @@ export function PlanView() {
             )
           }
         >
-          {rules.length === 0 ? (
+          {rulesLoading && rules.length === 0 ? (
+            <TxSkeleton count={3} className="-mx-2" />
+          ) : rules.length === 0 ? (
             <EmptyState
-              icon={<Repeat />}
+              illustration={<RecurringArt />}
               title="Nothing recurring yet"
               action={
                 <Button size="sm" onClick={() => openRule(null)}>
@@ -124,13 +137,13 @@ export function PlanView() {
               Rent, salary, a wifi bill or a monthly move to savings. Hisab reminds you in “Due soon”, or records it for you.
             </EmptyState>
           ) : (
-            <ul className="-mx-2 flex flex-col">
+            <ul ref={rulesMotion} className="-mx-2 flex flex-col">
               {rules.map((r) => {
                 const from = [r.anchor_date, r.due_from ?? ''].reduce((a, b) => (b > a ? b : a))
                 const next = r.paused_at ? null : (occurrences(r, from, addDays(today, 800)).find((d) => !done.get(r.id)?.has(d)) ?? null)
                 const title = r.note || r.category_name || `${r.account_name} → ${r.to_account_name}`
                 return (
-                  <li key={r.id} className="flex items-center rounded-[12px] transition-colors duration-150 hover:bg-surface-muted/60">
+                  <li key={r.id} data-flip-key={r.id} className="flex items-center rounded-[12px] transition-colors duration-150 hover:bg-surface-muted/60 has-[>button:active]:bg-surface-muted">
                     <button
                       type="button"
                       onClick={() => openRule(r.id)}
@@ -185,9 +198,11 @@ export function PlanView() {
             )
           }
         >
-          {loans.length === 0 ? (
+          {loansLoading && loans.length === 0 ? (
+            <TxSkeleton count={2} />
+          ) : loans.length === 0 ? (
             <EmptyState
-              icon={<Landmark />}
+              illustration={<LoanArt />}
               title="No loans"
               action={
                 <Button size="sm" onClick={() => openLoan(null)}>
@@ -198,11 +213,11 @@ export function PlanView() {
               Track a bank or bike loan’s EMIs: what’s left, the next due date and when you’ll be debt-free.
             </EmptyState>
           ) : (
-            <ul className="flex flex-col divide-y divide-border-subtle">
+            <ul ref={loansMotion} className="flex flex-col divide-y divide-border-subtle">
               {loans.map((l) => {
                 const p = loanProgress(l, l.paid_count, l.paid_amount, today)
                 return (
-                  <li key={l.id} className="py-3 first:pt-1 last:pb-0">
+                  <li key={l.id} data-flip-key={l.id} className="py-3 first:pt-1 last:pb-0">
                     <button
                       type="button"
                       onClick={() => openLoan(l.id)}
@@ -245,7 +260,7 @@ export function PlanView() {
                               const id = await markEmiPaid(db, userId, l.id, { occurred_on: today })
                               toast(`EMI paid · ${l.name}`, { action: { label: 'Undo', onClick: () => void softDeleteTransaction(db, id) } })
                             } catch (e) {
-                              toast(e instanceof Error ? e.message : 'Couldn’t record it')
+                              toast.error(e instanceof Error ? e.message : 'Couldn’t record it')
                             } finally {
                               paying.current.delete(l.id)
                             }
@@ -265,34 +280,34 @@ export function PlanView() {
       </div>
 
       <Dialog open={ruleEdit !== null} onOpenChange={(o) => !o && setRuleEdit(null)}>
-        {ruleEdit !== null && (ruleEdit.id === null || editRule) && (
+        {ruleView !== null && (ruleView.id === null || viewRule) && (
           <DialogContent
-            title={editRule ? 'Edit recurring' : 'New recurring'}
-            description={editRule ? `${cadence(editRule)} · change it, pause it or delete it.` : 'Something that repeats: a bill, rent, salary, a move to savings.'}
+            title={viewRule ? 'Edit recurring' : 'New recurring'}
+            description={viewRule ? `${cadence(viewRule)} · change it, pause it or delete it.` : 'Something that repeats: a bill, rent, salary, a move to savings.'}
           >
-            <RecurringForm key={ruleEdit.key} rule={editRule ?? null} onDone={() => setRuleEdit(null)} />
+            <RecurringForm key={ruleView.key} rule={viewRule ?? null} onDone={() => setRuleEdit(null)} />
           </DialogContent>
         )}
       </Dialog>
 
       <Dialog open={loanEdit !== null} onOpenChange={(o) => !o && setLoanEdit(null)}>
-        {loanEdit !== null && (loanEdit.id === null || editLoan) && (
+        {loanView !== null && (loanView.id === null || viewLoan) && (
           <DialogContent
-            title={editLoan ? 'Edit loan' : 'New loan'}
-            description={editLoan ? `${editLoan.paid_count + editLoan.installments_paid_before} of ${editLoan.total_installments} EMIs paid` : 'A loan with a fixed monthly EMI.'}
+            title={viewLoan ? 'Edit loan' : 'New loan'}
+            description={viewLoan ? `${viewLoan.paid_count + viewLoan.installments_paid_before} of ${viewLoan.total_installments} EMIs paid` : 'A loan with a fixed monthly EMI.'}
           >
-            <LoanForm key={loanEdit.key} loan={editLoan ?? null} onDone={() => setLoanEdit(null)} />
+            <LoanForm key={loanView.key} loan={viewLoan ?? null} onDone={() => setLoanEdit(null)} />
           </DialogContent>
         )}
       </Dialog>
 
       <Dialog open={editing !== null} onOpenChange={(o) => !o && setEditing(null)}>
-        {editing !== null && (
+        {budgetView !== null && (
           <DialogContent
-            title={editing === 'new' ? 'New budget' : `${editing.category_name ?? 'Overall'} budget`}
-            description={editing === 'new' ? 'A monthly limit, overall or for one category.' : 'Change the monthly limit, or remove it.'}
+            title={budgetView === 'new' ? 'New budget' : `${budgetView.category_name ?? 'Overall'} budget`}
+            description={budgetView === 'new' ? 'A monthly limit, overall or for one category.' : 'Change the monthly limit, or remove it.'}
           >
-            <BudgetForm budget={editing === 'new' ? null : editing} existing={budgets} onDone={() => setEditing(null)} />
+            <BudgetForm budget={budgetView === 'new' ? null : budgetView} existing={budgets} onDone={() => setEditing(null)} />
           </DialogContent>
         )}
       </Dialog>
@@ -386,8 +401,10 @@ export function PeopleView() {
   const db = usePowerSync()
   const { userId, currency, grouping, timeZone } = useProfile()
   const today = useToday(timeZone)
-  const { data: people } = useQuery<PersonWithBalance>(QL.peopleWithBalances)
+  const { data: people, isLoading } = useQuery<PersonWithBalance>(QL.peopleWithBalances)
+  const peopleMotion = useListMotion<HTMLUListElement>()
   const [repay, setRepay] = useState<{ person: PersonWithBalance; direction: 'lent' | 'borrowed' } | null>(null)
+  const repayView = useLastDefined(repay)
   const money = (m: number) => formatMoney(m, currency, { grouping }).text
   const { hidden } = usePrivacy()
 
@@ -412,30 +429,34 @@ export function PeopleView() {
       {people.length > 0 && (
         <div className="grid grid-cols-2 gap-3 md:gap-4">
           <Summary label="Owed to you" sub={`${owers} ${owers === 1 ? 'person' : 'people'}${overdue ? ` · ${overdue} overdue` : ''}`} subTone={overdue ? 'danger' : undefined}>
-            <Money minor={owedToMe} currency={currency} grouping={grouping} className={cn(owedToMe > 0 && 'text-positive')} />
+            <Money minor={owedToMe} currency={currency} grouping={grouping} animate className={cn(owedToMe > 0 && 'text-positive')} />
           </Summary>
           <Summary label="You owe" sub={`${lenders} ${lenders === 1 ? 'person' : 'people'}`}>
-            <Money minor={iOwe} currency={currency} grouping={grouping} />
+            <Money minor={iOwe} currency={currency} grouping={grouping} animate />
           </Summary>
         </div>
       )}
 
-      {people.length === 0 ? (
+      {isLoading && people.length === 0 ? (
+        <Card bodyClassName="px-2 pb-2 pt-2">
+          <TxSkeleton count={3} />
+        </Card>
+      ) : people.length === 0 ? (
         <Card>
-          <EmptyState icon={<Users />} title="No one here yet" className="py-12">
+          <EmptyState illustration={<PeopleArt />} title="No one here yet" className="py-12">
             When you lend money to someone or borrow from them, add it in the phone app (People → +). Balances and reminders show up here.
           </EmptyState>
         </Card>
       ) : (
         <Card title="Everyone" description={`${people.length} ${people.length === 1 ? 'person' : 'people'}`} bodyClassName="px-2 pb-2">
-          <ul className="flex flex-col">
+          <ul ref={peopleMotion} className="flex flex-col">
             {people.map((p) => {
               const owes = p.owed_to_me > 0
               const owed = p.i_owe > 0
               const late = p.next_due !== null && p.next_due < today
               const status = owes && owed ? `Owes you · you owe ${hidden ? `${currency} ${MASK}` : money(p.i_owe)}` : owes ? 'Owes you' : owed ? 'You owe' : 'Settled'
               return (
-                <li key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[14px] px-3 py-3 transition-colors duration-150 hover:bg-surface-muted/60 md:flex-nowrap">
+                <li key={p.id} data-flip-key={p.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[14px] px-3 py-3 transition-colors duration-150 hover:bg-surface-muted/60 md:flex-nowrap">
                   <Avatar name={p.name} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[14px] font-medium" title={p.name}>
@@ -477,9 +498,9 @@ export function PeopleView() {
         </Card>
       )}
       <Dialog open={repay !== null} onOpenChange={(o) => !o && setRepay(null)}>
-        {repay && (
-          <DialogContent title={repay.direction === 'lent' ? `Got paid by ${repay.person.name}` : `Paid back ${repay.person.name}`} description="Record a full or partial repayment.">
-            <RepayForm person={repay.person} direction={repay.direction} onDone={() => setRepay(null)} />
+        {repayView && (
+          <DialogContent title={repayView.direction === 'lent' ? `Got paid by ${repayView.person.name}` : `Paid back ${repayView.person.name}`} description="Record a full or partial repayment.">
+            <RepayForm person={repayView.person} direction={repayView.direction} onDone={() => setRepay(null)} />
           </DialogContent>
         )}
       </Dialog>

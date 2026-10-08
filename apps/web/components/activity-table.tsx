@@ -3,9 +3,9 @@
 import { dayLabel, monthLabel, monthRange, totalEffect } from '@hisab/core'
 import { bulkRecategorizeWithUndo, bulkRestore, bulkSetCategories, bulkSoftDelete, Q, type CategoryOption, type TransactionView } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
-import { ArrowDown, ArrowUp, Inbox, Search, SearchX, Trash2, X } from 'lucide-react'
+import { ArrowDown, ArrowUp, Plus, Search, SearchX, Trash2, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/components/ui/toaster'
 import { labelFor, TxLine, txTitle } from '@/components/dashboard'
 import { Money } from '@/components/money'
 import { MonthStepper } from '@/components/month-stepper'
@@ -13,8 +13,11 @@ import { useQuickLog } from '@/components/quick-log/quick-log'
 import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/ui/card'
 import { CategoryIcon } from '@/components/ui/category-icon'
+import { EmptyMonthArt } from '@/components/ui/illustrations'
+import { TxSkeleton } from '@/components/ui/skeleton'
 import { PillSelect } from '@/components/ui/chip'
 import { useIsTouch } from '@/lib/data'
+import { useListMotion } from '@/lib/motion'
 import { useProfile, useToday } from '@/lib/profile'
 import { cn } from '@/lib/utils'
 
@@ -52,6 +55,9 @@ export function ActivityTable() {
   const [sort, setSort] = useState<Sort>({ key: 'date', dir: -1 })
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const filtering = Boolean(q || type || account || category)
+  const tableMotion = useListMotion<HTMLDivElement>(month)
+  const listMotion = useListMotion<HTMLDivElement>(month)
+  const loading = isLoading && rows.length === 0
 
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -125,8 +131,22 @@ export function ActivityTable() {
   const empty =
     visible.length === 0 && !isLoading ? (
       rows.length === 0 ? (
-        <EmptyState icon={<Inbox />} title={`No transactions in ${monthLabel(month)}`}>
-          {touch ? 'Tap + to log one.' : 'Press N to log one.'}
+        <EmptyState
+          illustration={<EmptyMonthArt />}
+          title={`Nothing logged in ${monthLabel(month)}`}
+          action={
+            month === monthRange(today).start ? (
+              <Button variant="outline" size="sm" onClick={() => quickLog.open()}>
+                <Plus /> Log money
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => setMonth(monthRange(today).start)}>
+                Back to {monthLabel(today)}
+              </Button>
+            )
+          }
+        >
+          {month === monthRange(today).start ? (touch ? 'Tap + to log your first one this month.' : 'Press N to log your first one this month.') : 'Nothing was recorded this month.'}
         </EmptyState>
       ) : (
         <EmptyState
@@ -148,10 +168,10 @@ export function ActivityTable() {
         <MonthStepper month={month} onChange={setMonth} max={monthRange(today).start} className="self-start" />
         <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-[12px] border border-border bg-border text-[13px] sm:flex sm:gap-0 sm:border-0 sm:bg-transparent">
           <Total label="In">
-            <Money minor={income} currency={currency} grouping={grouping} className={cn('font-semibold', income > 0 && 'text-positive')} />
+            <Money minor={income} currency={currency} grouping={grouping} animate className={cn('font-semibold', income > 0 && 'text-positive')} />
           </Total>
           <Total label="Out">
-            <Money minor={expense} currency={currency} grouping={grouping} className="font-semibold" />
+            <Money minor={expense} currency={currency} grouping={grouping} animate className="font-semibold" />
           </Total>
         </dl>
       </div>
@@ -265,7 +285,7 @@ export function ActivityTable() {
       )}
 
       {/* Desktop: table */}
-      <div className="hidden overflow-hidden rounded-card border border-border bg-surface md:block">
+      <div ref={tableMotion} className="relative hidden overflow-hidden rounded-card border border-border bg-surface md:block">
         <table className="w-full table-fixed text-[13.5px]">
           <colgroup>
             <col className="w-12" />
@@ -311,10 +331,34 @@ export function ActivityTable() {
                 <td colSpan={grouped ? 5 : 6}>{empty}</td>
               </tr>
             )}
+            {loading &&
+              [0, 1, 2, 3, 4, 5].map((i) => (
+                <tr key={`sk${i}`} aria-hidden className="border-b border-border-subtle last:border-0">
+                  <td className="py-2 pr-2 pl-5">
+                    <span className="skeleton block size-4 rounded-[5px]" />
+                  </td>
+                  {!grouped && <td className="px-3 py-2" />}
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-3">
+                      <span className="skeleton size-7 shrink-0 rounded-[8px]" />
+                      <span className="skeleton block h-3.5" style={{ width: `${[46, 34, 58, 40, 52, 30][i]}%` }} />
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="skeleton block h-3 w-20" />
+                  </td>
+                  <td className="px-3 py-2">
+                    <span className="skeleton block h-3 w-14" />
+                  </td>
+                  <td className="py-2 pr-5 pl-3">
+                    <span className="skeleton ml-auto block h-3.5 w-16" />
+                  </td>
+                </tr>
+              ))}
             {groups.map((g) => (
               <Fragment key={g.day || 'all'}>
                 {grouped && (
-                  <tr className="border-b border-border-subtle bg-surface-muted/60">
+                  <tr data-flip-key={`day:${g.day}`} className="border-b border-border-subtle bg-surface-muted/60">
                     <td colSpan={4} className="py-2 pr-3 pl-5 text-[12.5px] font-semibold text-text-muted">
                       {dayLabel(g.day, today)}
                     </td>
@@ -331,6 +375,7 @@ export function ActivityTable() {
                   return (
                     <tr
                       key={t.id}
+                      data-flip-key={t.id}
                       tabIndex={editable ? 0 : undefined}
                       aria-label={editable ? `Edit ${title}` : undefined}
                       onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && edit(t)}
@@ -385,20 +430,21 @@ export function ActivityTable() {
       </div>
 
       {/* Phone: grouped list */}
-      <div className="flex flex-col gap-5 md:hidden">
+      <div ref={listMotion} className="flex flex-col gap-5 md:hidden">
+        {loading && <TxSkeleton count={6} className="rounded-card border border-border bg-surface p-1.5" />}
         {empty && <div className="rounded-card border border-border bg-surface">{empty}</div>}
         {visible.length > 0 &&
           groups.map((g) => (
             <section key={g.day || 'all'} aria-label={grouped ? dayLabel(g.day, today) : 'Transactions'}>
               {grouped && (
-                <div className="mb-2 flex items-baseline justify-between px-1 text-[12.5px]">
+                <div data-flip-key={`day:${g.day}`} className="mb-2 flex items-baseline justify-between px-1 text-[12.5px]">
                   <h2 className="font-semibold text-text-muted">{dayLabel(g.day, today)}</h2>
                   {g.net !== 0 && <Money minor={g.net} currency={currency} grouping={grouping} sign="always" hideCode className="font-medium text-text-faint" />}
                 </div>
               )}
               <ul className="flex flex-col rounded-card border border-border bg-surface p-1.5">
                 {g.rows.map((t) => (
-                  <li key={t.id}>
+                  <li key={t.id} data-flip-key={t.id} className="rounded-[12px]">
                     <TxLine tx={t} showDate={grouped ? undefined : shortDate(t.occurred_on)} onClick={EDITABLE.has(t.type) ? () => edit(t) : undefined} />
                   </li>
                 ))}

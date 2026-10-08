@@ -5,15 +5,17 @@ import { markEmiPaid, postOccurrence, Q, QP, skipOccurrence, softDeleteTransacti
 import { usePowerSync, useQuery } from '@powersync/react'
 import { Check, Plus, SkipForward, Sparkles, Target } from 'lucide-react'
 import { useRef } from 'react'
-import { toast } from 'sonner'
+import { toast } from '@/components/ui/toaster'
 import { BalanceHero } from '@/components/balance-hero'
 import { Money } from '@/components/money'
 import { useQuickLog } from '@/components/quick-log/quick-log'
 import { Button, Kbd } from '@/components/ui/button'
 import { Card, CardLink, EmptyState } from '@/components/ui/card'
 import { CategoryIcon } from '@/components/ui/category-icon'
+import { TxSkeleton } from '@/components/ui/skeleton'
 import { budgetTone, Progress } from '@/components/ui/progress'
 import { useCategoryMeta, useDueItems, useIsTouch } from '@/lib/data'
+import { useListMotion } from '@/lib/motion'
 import { useProfile, useToday } from '@/lib/profile'
 import { cn } from '@/lib/utils'
 
@@ -62,6 +64,7 @@ function DueList({ items, today }: { items: DueItem[]; today: string }) {
   const db = usePowerSync()
   const { userId, currency, grouping } = useProfile()
   const busy = useRef(new Set<string>())
+  const list = useListMotion<HTMLUListElement>()
 
   const record = async (item: DueItem) => {
     if (busy.current.has(item.key)) return
@@ -70,13 +73,13 @@ function DueList({ items, today }: { items: DueItem[]; today: string }) {
       if (item.kind === 'recurring') {
         const r = await postOccurrence(db, userId, item.rule, item.date, { occurred_on: item.date > today ? today : item.date })
         if (r.created) toast(`Recorded · ${item.rule.note || item.rule.category_name}`, { action: { label: 'Undo', onClick: () => void softDeleteTransaction(db, r.id) } })
-        else toast('Already recorded')
+        else toast.info('Already recorded')
       } else {
         const id = await markEmiPaid(db, userId, item.loan.id, { occurred_on: today })
         toast(`EMI paid · ${item.loan.name}`, { action: { label: 'Undo', onClick: () => void softDeleteTransaction(db, id) } })
       }
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Couldn’t record it')
+      toast.error(e instanceof Error ? e.message : 'Couldn’t record it')
     } finally {
       busy.current.delete(item.key)
     }
@@ -84,14 +87,14 @@ function DueList({ items, today }: { items: DueItem[]; today: string }) {
 
   return (
     <Card title="Due soon" action={<CardLink href="/plan">See all</CardLink>}>
-      <ul className="-mx-2 flex flex-col">
+      <ul ref={list} className="-mx-2 flex flex-col">
         {items.map((item) => {
           const title = item.kind === 'emi' ? item.loan.name : item.rule.note || item.rule.category_name || 'Recurring'
           const amount = item.kind === 'emi' ? item.loan.emi_amount_minor : item.rule.amount_minor
           const income = item.kind === 'recurring' && item.rule.type === 'income'
           const canRecord = item.kind === 'recurring' || Boolean(item.loan.default_account_id)
           return (
-            <li key={item.key} className="flex items-center gap-3 rounded-[12px] px-2 py-2.5">
+            <li key={item.key} data-flip-key={item.key} className="flex items-center gap-3 rounded-[12px] px-2 py-2.5">
               {item.kind === 'emi' ? <CategoryIcon icon="🏦" color="slate" /> : <CategoryIcon icon={item.rule.category_icon ?? '🔁'} color={item.rule.category_color} transfer={item.rule.type === 'transfer'} />}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[14px] font-medium" title={title}>
@@ -146,7 +149,8 @@ function TodayList({ today }: { today: string }) {
   const { currency, grouping } = useProfile()
   const quickLog = useQuickLog()
   const touch = useIsTouch()
-  const { data: rows } = useQuery<TransactionView>(Q.transactionsBetween, [today, today])
+  const { data: rows, isLoading } = useQuery<TransactionView>(Q.transactionsBetween, [today, today])
+  const list = useListMotion<HTMLDivElement>(today)
   const spent = rows.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount_minor, 0)
   return (
     <Card
@@ -159,36 +163,40 @@ function TodayList({ today }: { today: string }) {
         ) : undefined
       }
     >
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={<Sparkles />}
-          title="Nothing logged today"
-          className="py-6"
-          action={
-            touch ? undefined : (
-              <Button variant="outline" size="sm" onClick={() => quickLog.open()}>
-                <Plus /> Log money <Kbd className="ml-1">N</Kbd>
-              </Button>
-            )
-          }
-        >
-          {touch ? (
-            <>
-              Tap <span className="font-semibold text-text">+</span> to log your first one.
-            </>
-          ) : (
-            'Log what you spend as it happens — it takes a few seconds.'
-          )}
-        </EmptyState>
-      ) : (
-        <ul className="-mx-2 flex flex-col">
-          {rows.map((t) => (
-            <li key={t.id}>
-              <TxLine tx={t} onClick={['expense', 'income', 'transfer'].includes(t.type) ? () => quickLog.open({ edit: t }) : undefined} />
-            </li>
-          ))}
-        </ul>
-      )}
+      <div ref={list}>
+        {isLoading && rows.length === 0 ? (
+          <TxSkeleton count={2} className="-mx-2" />
+        ) : rows.length === 0 ? (
+          <EmptyState
+            icon={<Sparkles />}
+            title="Nothing logged today"
+            className="py-6"
+            action={
+              touch ? undefined : (
+                <Button variant="outline" size="sm" onClick={() => quickLog.open()}>
+                  <Plus /> Log money <Kbd className="ml-1">N</Kbd>
+                </Button>
+              )
+            }
+          >
+            {touch ? (
+              <>
+                Tap <span className="font-semibold text-text">+</span> to log your first one.
+              </>
+            ) : (
+              'Log what you spend as it happens — it takes a few seconds.'
+            )}
+          </EmptyState>
+        ) : (
+          <ul className="-mx-2 flex flex-col">
+            {rows.map((t) => (
+              <li key={t.id} data-flip-key={t.id} className="rounded-[12px]">
+                <TxLine tx={t} onClick={['expense', 'income', 'transfer'].includes(t.type) ? () => quickLog.open({ edit: t }) : undefined} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </Card>
   )
 }
@@ -209,7 +217,7 @@ export function TxLine({ tx, onClick, showDate }: { tx: TransactionView; onClick
       type="button"
       onClick={onClick}
       disabled={!onClick}
-      className="flex w-full items-center gap-3 rounded-[12px] px-2 py-2.5 text-left transition-colors duration-150 enabled:hover:bg-surface-muted disabled:cursor-default"
+      className="flex w-full items-center gap-3 rounded-[12px] px-2 py-2.5 text-left transition-[background-color,transform] duration-150 enabled:hover:bg-surface-muted enabled:active:scale-[0.99] enabled:active:bg-surface-muted disabled:cursor-default"
     >
       <CategoryIcon icon={tx.category_icon ?? (tx.type === 'emi' ? '🏦' : null)} color={tx.category_color} transfer={transfer} />
       <span className="min-w-0 flex-1">
@@ -244,9 +252,9 @@ function MonthCard({ today }: { today: string }) {
   return (
     <Card title={monthLabel(today)} action={<CardLink href="/reports">Full report</CardLink>}>
       <div className="grid divide-y divide-border-subtle rounded-[14px] border border-border-subtle bg-surface-muted/50 sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:py-3">
-        <Stat label="In" value={<Money minor={r.income} currency={currency} grouping={grouping} className={cn(r.income > 0 && 'text-positive')} />} />
-        <Stat label="Out" value={<Money minor={r.spending + r.emi} currency={currency} grouping={grouping} />} />
-        <Stat label="Net" value={<Money minor={r.net} currency={currency} grouping={grouping} />} />
+        <Stat label="In" value={<Money minor={r.income} currency={currency} grouping={grouping} animate className={cn(r.income > 0 && 'text-positive')} />} />
+        <Stat label="Out" value={<Money minor={r.spending + r.emi} currency={currency} grouping={grouping} animate />} />
+        <Stat label="Net" value={<Money minor={r.net} currency={currency} grouping={grouping} animate />} />
       </div>
       {top.length > 0 ? (
         <>
@@ -320,8 +328,9 @@ export function SafeToSpend({ overall, today }: { overall: BudgetWithSpent; toda
 }
 
 export function BudgetList({ budgets, currency, grouping, onEdit }: { budgets: BudgetWithSpent[]; currency: string; grouping: Grouping; onEdit?: (b: BudgetWithSpent) => void }) {
+  const list = useListMotion<HTMLUListElement>()
   return (
-    <ul className={cn('flex flex-col', onEdit ? '-mx-2 gap-0.5' : 'gap-4')}>
+    <ul ref={list} className={cn('flex flex-col', onEdit ? '-mx-2 gap-0.5' : 'gap-4')}>
       {budgets.map((b) => {
         const { ratio, state } = budgetProgress(b.spent, b.amount_minor)
         const name = b.category_name ?? 'Overall'
@@ -347,9 +356,9 @@ export function BudgetList({ budgets, currency, grouping, onEdit }: { budgets: B
           </>
         )
         return (
-          <li key={b.id}>
+          <li key={b.id} data-flip-key={b.id} className="rounded-[12px]">
             {onEdit ? (
-              <button type="button" onClick={() => onEdit(b)} aria-label={`Edit ${name} budget`} className="w-full rounded-[12px] px-2 py-2.5 text-left transition-colors duration-150 hover:bg-surface-muted">
+              <button type="button" onClick={() => onEdit(b)} aria-label={`Edit ${name} budget`} className="w-full rounded-[12px] px-2 py-2.5 text-left transition-[background-color,transform] duration-150 hover:bg-surface-muted active:scale-[0.99]">
                 {body}
               </button>
             ) : (

@@ -8,6 +8,7 @@ import { useMemo } from 'react'
 import { Money } from '@/components/money'
 import { usePrivacy } from '@/lib/privacy'
 import { useProfile, useToday } from '@/lib/profile'
+import { cn } from '@/lib/utils'
 
 const TREND_DAYS = 30
 
@@ -39,18 +40,22 @@ export function BalanceHero() {
       <div aria-hidden className="pointer-events-none absolute -top-16 -right-16 size-56 rounded-full bg-[radial-gradient(rgba(255,255,255,0.09),transparent_70%)]" />
       <div className="flex items-center justify-between">
         <p className="text-[13px] font-medium text-white/60">Total balance</p>
-        <span aria-hidden className="grid size-7 place-items-center rounded-full text-white/45 transition-colors group-hover:bg-white/10 group-hover:text-white/80">
-          {hidden ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+        <span aria-hidden className="relative grid size-7 place-items-center rounded-full text-white/45 transition-colors duration-150 group-hover:bg-white/10 group-hover:text-white/80">
+          <Eye className={cn('absolute size-4 transition-[opacity,transform] duration-200 ease-out', hidden && 'scale-75 opacity-0')} />
+          <EyeOff className={cn('absolute size-4 transition-[opacity,transform] duration-200 ease-out', !hidden && 'scale-75 opacity-0')} />
         </span>
       </div>
-      <Money minor={total} currency={currency} grouping={grouping} className="mt-1 block text-[34px] leading-tight font-semibold tracking-[-0.03em] md:text-[38px]" />
-      {hidden ? <div className="mt-3 h-[36px]" aria-hidden /> : <Sparkline values={series} />}
+      <Money minor={total} currency={currency} grouping={grouping} animate className="mt-1 block text-[34px] leading-tight font-semibold tracking-[-0.03em] md:text-[38px]" />
+      {/* The trend hides with the amounts (it gives them away), fading rather than popping. */}
+      <div className={cn('mt-3 h-[36px] transition-[opacity,filter] duration-300 ease-out', hidden && 'opacity-0 blur-[3px]')} aria-hidden>
+        <Sparkline values={series} />
+      </div>
       <div className="mt-4 grid grid-cols-2 gap-2.5">
         <Tile label="Owed to you">
-          <Money minor={owed} currency={currency} grouping={grouping} className={owed > 0 ? 'text-[#4ADE80]' : undefined} />
+          <Money minor={owed} currency={currency} grouping={grouping} animate className={owed > 0 ? 'text-[#4ADE80]' : undefined} />
         </Tile>
         <Tile label="Loans left">
-          <Money minor={loansLeft} currency={currency} grouping={grouping} />
+          <Money minor={loansLeft} currency={currency} grouping={grouping} animate />
         </Tile>
       </div>
     </section>
@@ -76,7 +81,7 @@ function Sparkline({ values }: { values: number[] }) {
   const pts = values.map((v, i) => [(i / (values.length - 1)) * w, span ? h - 3 - ((v - min) / span) * (h - 6) : h / 2] as const)
   const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ')
   return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="mt-3 h-[36px] w-full" aria-hidden>
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="h-[36px] w-full" aria-hidden>
       <defs>
         <linearGradient id="hero-fill" x1="0" x2="0" y1="0" y2="1">
           <stop offset="0" stopColor="#fff" stopOpacity="0.18" />
