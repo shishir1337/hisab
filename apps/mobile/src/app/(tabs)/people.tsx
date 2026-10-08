@@ -1,12 +1,15 @@
 import { QL, type PersonWithBalance } from '@hisab/db'
 import { useQuery } from '@powersync/react'
 import { router } from 'expo-router'
-import { HandCoins, Plus, Search, X } from 'lucide-react-native'
+import { Plus, Search, X } from 'lucide-react-native'
 import { useMemo, useState } from 'react'
 import { Text, TextInput, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { Avatar } from '@/components/avatar'
 import { Button } from '@/components/button'
 import { shortDay } from '@/components/form'
+import { PeopleArt } from '@/components/illustrations'
+import { useArrivals, useListMotion } from '@/components/list-motion'
 import { Money } from '@/components/money'
 import { Press } from '@/components/press'
 import { Divider, EmptyState, Screen, SectionHeader } from '@/components/screen'
@@ -29,6 +32,10 @@ export default function PeopleScreen() {
     { title: 'You owe', rows: filtered.filter((p) => p.owed_to_me <= 0 && p.i_owe > 0) },
     { title: 'Settled', rows: filtered.filter((p) => p.owed_to_me <= 0 && p.i_owe <= 0) },
   ].filter((g) => g.rows.length > 0)
+  const motion = useListMotion()
+  // Keyed by group, so someone moving from "Owe you" to "Settled" animates into their new group.
+  const placed = useMemo(() => groups.flatMap((g) => g.rows.map((p) => `${g.title}:${p.id}`)), [filtered])
+  const arrived = useArrivals(placed, query.trim())
 
   const lend = (
     <Press
@@ -81,7 +88,7 @@ export default function PeopleScreen() {
 
       {people.length === 0 ? (
         <EmptyState
-          icon={<HandCoins size={20} color={colors.textMuted} />}
+          art={<PeopleArt />}
           title="Lent someone money?"
           description="Note it here — Hisab reminds you, and sends them a polite WhatsApp nudge in one tap."
           action={<Button onPress={() => router.push('/lend')}>Add a lending</Button>}
@@ -109,7 +116,7 @@ export default function PeopleScreen() {
                         ? 'Company'
                         : 'All settled'
                 return (
-                  <View key={p.id}>
+                  <Animated.View key={p.id} entering={arrived.has(`${g.title}:${p.id}`) ? motion.entering : undefined} exiting={motion.exiting} layout={motion.layout}>
                     {i > 0 && <Divider inset={52} />}
                     <Press
                       accessibilityRole="button"
@@ -130,7 +137,7 @@ export default function PeopleScreen() {
                         <Money minor={owes ? p.owed_to_me : p.i_owe} currency={currency} grouping={grouping} hideCode size={15} weight="600" color={owes ? colors.positive : colors.text} />
                       )}
                     </Press>
-                  </View>
+                  </Animated.View>
                 )
               })}
             </View>

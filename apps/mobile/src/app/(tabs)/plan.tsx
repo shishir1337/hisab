@@ -2,16 +2,20 @@ import { addDays, budgetProgress, loanProgress, monthRange, occurrences, safeToS
 import { groupOccurrences, pauseRecurringRule, QP, type BudgetWithSpent, type LoanWithPayments, type RecurringRuleView } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
 import { router } from 'expo-router'
-import { CalendarClock, ChevronRight, Landmark, Pause, Play, Plus, Target } from 'lucide-react-native'
-import { useState, type ReactNode } from 'react'
+import { ChevronRight, Pause, Play, Plus } from 'lucide-react-native'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Text, View } from 'react-native'
+import Animated, { FadeIn } from 'react-native-reanimated'
 import { ProgressBar } from '@/components/due-strip'
 import { monthYear, shortDay } from '@/components/form'
 import { IconTile } from '@/components/icon-tile'
+import { BudgetArt, LoanArt, PlanArt } from '@/components/illustrations'
+import { useArrivals, useListMotion } from '@/components/list-motion'
 import { Money } from '@/components/money'
 import { Press } from '@/components/press'
 import { Divider, Screen } from '@/components/screen'
 import { Segmented } from '@/components/segmented'
+import { duration, easing, useMotion } from '@/lib/motion'
 import { useProfile, useToday } from '@/lib/profile'
 import { cadenceShort } from '@/features/plan/format'
 import { useTheme } from '@/lib/theme'
@@ -21,6 +25,7 @@ type Section = 'budgets' | 'recurring' | 'loans'
 
 export default function PlanScreen() {
   const [section, setSection] = useState<Section>('budgets')
+  const { reduced } = useMotion()
   return (
     <Screen title="Plan">
       <Segmented<Section>
@@ -32,7 +37,10 @@ export default function PlanScreen() {
           { value: 'loans', label: 'Loans' },
         ]}
       />
-      <View style={{ marginTop: 16 }}>{section === 'budgets' ? <Budgets /> : section === 'recurring' ? <Recurring /> : <Loans />}</View>
+      {/* Switching sections cross-fades instead of snapping. */}
+      <Animated.View key={section} entering={reduced ? undefined : FadeIn.duration(duration.base).easing(easing.out)} style={{ marginTop: 16 }}>
+        {section === 'budgets' ? <Budgets /> : section === 'recurring' ? <Recurring /> : <Loans />}
+      </Animated.View>
     </Screen>
   )
 }
@@ -53,6 +61,8 @@ function Budgets() {
   const { data } = useQuery<BudgetWithSpent>(QP.budgetsWithSpent, [start, end])
   const overall = data.find((b) => !b.category_id)
   const categories = data.filter((b) => b.category_id)
+  const motion = useListMotion()
+  const arrived = useArrivals(useMemo(() => categories.map((b) => b.id), [data]), 'budgets')
   const daysLeft = Number(end.slice(8)) - Number(today.slice(8)) + 1
 
   const op = overall ? budgetProgress(overall.spent, overall.amount_minor) : null
@@ -96,7 +106,7 @@ function Budgets() {
         </Press>
       ) : (
         <AddCard
-          icon={<Target size={18} color={colors.text} />}
+          icon={<BudgetArt size={96} />}
           label="Set a monthly budget"
           hint="One number for everything you spend — see what’s safe to spend each day."
           onPress={() => router.push({ pathname: '/budget', params: { category: '' } })}
@@ -104,11 +114,11 @@ function Budgets() {
       )}
 
       {categories.length > 0 && (
-        <View style={{ borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 14 }}>
+        <Animated.View layout={motion.layout} style={{ borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 14, overflow: 'hidden' }}>
           {categories.map((b, i) => {
             const p = budgetProgress(b.spent, b.amount_minor)
             return (
-              <View key={b.id}>
+              <Animated.View key={b.id} entering={arrived.has(b.id) ? motion.entering : undefined} exiting={motion.exiting} layout={motion.layout}>
                 {i > 0 && <Divider inset={48} />}
                 <Press
                   accessibilityRole="button"
@@ -135,10 +145,10 @@ function Budgets() {
                     </Text>
                   </View>
                 </Press>
-              </View>
+              </Animated.View>
             )
           })}
-        </View>
+        </Animated.View>
       )}
       <AddRow label="Budget a category" onPress={() => router.push('/budget')} />
     </View>
@@ -154,6 +164,8 @@ function Recurring() {
   const db = usePowerSync()
   const toast = useToast()
   const { data: rules } = useQuery<RecurringRuleView>(QP.recurringRules)
+  const motion = useListMotion()
+  const arrived = useArrivals(useMemo(() => rules.map((r) => r.id), [rules]), 'recurring')
   const { data: posted } = useQuery<{ rule_id: string; occurrence_date: string }>(QP.postedOccurrences)
   const { data: skipped } = useQuery<{ rule_id: string; occurrence_date: string }>(QP.skippedOccurrences)
   const done = (() => {
@@ -177,7 +189,7 @@ function Recurring() {
   if (rules.length === 0)
     return (
       <AddCard
-        icon={<CalendarClock size={18} color={colors.text} />}
+        icon={<PlanArt size={96} />}
         label="Add your salary or rent"
         hint="Things that repeat show up as due on Home — record them with one tap."
         onPress={() => router.push('/recurring')}
@@ -185,7 +197,7 @@ function Recurring() {
     )
   return (
     <View style={{ gap: 12 }}>
-      <View style={{ borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 14 }}>
+      <Animated.View layout={motion.layout} style={{ borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 14, overflow: 'hidden' }}>
         {rules.map((r, i) => {
           const next = nextFor(r)
           const positive = r.type === 'income'
@@ -193,7 +205,7 @@ function Recurring() {
           const overdue = next !== null && next < today
           const title = r.note || r.category_name || `${r.account_name} → ${r.to_account_name}`
           return (
-            <View key={r.id}>
+            <Animated.View key={r.id} entering={arrived.has(r.id) ? motion.entering : undefined} exiting={motion.exiting} layout={motion.layout}>
               {i > 0 && <Divider inset={52} />}
               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                 <Press
@@ -234,10 +246,10 @@ function Recurring() {
                   {paused ? <Play size={13} color={colors.text} fill={colors.text} /> : <Pause size={13} color={colors.textMuted} fill={colors.textMuted} />}
                 </Press>
               </View>
-            </View>
+            </Animated.View>
           )
         })}
-      </View>
+      </Animated.View>
       <AddRow label="Add recurring item" onPress={() => router.push('/recurring')} />
     </View>
   )
@@ -250,11 +262,13 @@ function Loans() {
   const today = useToday(timeZone)
   const { colors } = useTheme()
   const { data: loans } = useQuery<LoanWithPayments>(QP.loansWithPayments)
+  const motion = useListMotion()
+  const arrived = useArrivals(useMemo(() => loans.map((l) => l.id), [loans]), 'loans')
 
   if (loans.length === 0)
     return (
       <AddCard
-        icon={<Landmark size={18} color={colors.text} />}
+        icon={<LoanArt size={96} />}
         label="Add a loan you’re paying"
         hint="See months left, amount left and your debt-free date."
         onPress={() => router.push('/loan-form')}
@@ -266,8 +280,9 @@ function Loans() {
         const p = loanProgress(l, l.paid_count, l.paid_amount, today)
         const done = p.monthsLeft === 0
         return (
+          <Animated.View key={l.id} entering={arrived.has(l.id) ? motion.entering : undefined} exiting={motion.exiting} layout={motion.layout}>
           <Press
-            key={l.id}
+
             accessibilityRole="button"
             accessibilityHint="Opens the loan"
             feedback="soft"
@@ -302,6 +317,7 @@ function Loans() {
               {p.paid} of {l.total_installments} paid · {p.monthsLeft} left{p.debtFreeBy ? ` · debt-free by ${monthYear(p.debtFreeBy)}` : ''}
             </Text>
           </Press>
+        </Animated.View>
         )
       })}
       <AddRow label="Add loan" onPress={() => router.push('/loan-form')} />
@@ -320,8 +336,9 @@ function AddCard({ icon, label, hint, onPress }: { icon: ReactNode; label: strin
       onPress={onPress}
       style={{ borderRadius: 18, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.textFaint + '66', backgroundColor: colors.surface, padding: 20 }}
     >
-      <View style={{ width: 40, height: 40, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted }}>{icon}</View>
-      <Text style={{ color: colors.text, fontSize: 15.5, fontWeight: '600', marginTop: 12 }}>{label}</Text>
+      {/* The art sits on its own soft disc; nudge it so the disc, not the canvas, lines up with the text. */}
+      <View style={{ marginLeft: -10, marginTop: -6 }}>{icon}</View>
+      <Text style={{ color: colors.text, fontSize: 15.5, fontWeight: '600', marginTop: 6 }}>{label}</Text>
       <Text style={{ color: colors.textMuted, fontSize: 13.5, marginTop: 3, lineHeight: 19 }}>{hint}</Text>
       <View style={{ marginTop: 14, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Plus size={16} color={colors.text} />

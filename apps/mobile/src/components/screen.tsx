@@ -308,11 +308,12 @@ export function Divider({ inset = 0 }: { inset?: number }) {
   return <View style={{ height: 1, marginLeft: inset, backgroundColor: colors.borderSubtle }} />
 }
 
-export function EmptyState({ icon, title, description, action }: { icon?: ReactNode; title: string; description?: string; action?: ReactNode }) {
+/** Empty state card: an illustration (or a small icon tile), one line of title, one of help, one action. */
+export function EmptyState({ icon, art, title, description, action }: { icon?: ReactNode; art?: ReactNode; title: string; description?: string; action?: ReactNode }) {
   const { colors } = useTheme()
   return (
     <View style={{ alignItems: 'center', borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 24, paddingVertical: 32 }}>
-      {icon ? (
+      {art ? <View style={{ marginBottom: 10 }}>{art}</View> : icon ? (
         <View style={{ width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted, marginBottom: 12 }}>{icon}</View>
       ) : null}
       <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600', textAlign: 'center' }}>{title}</Text>

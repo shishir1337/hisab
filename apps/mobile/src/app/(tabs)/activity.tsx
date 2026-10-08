@@ -1,19 +1,24 @@
 import { addMonths, dayLabel, monthLabel, monthRange, totalEffect, type Grouping } from '@hisab/core'
-import { Q, restoreTransaction, softDeleteTransaction, type TransactionView } from '@hisab/db'
+import { createTransaction, Q, restoreTransaction, softDeleteTransaction, type TransactionView } from '@hisab/db'
 import { usePowerSync, useQuery } from '@powersync/react'
-import * as Haptics from 'expo-haptics'
 import { router } from 'expo-router'
-import { ChevronLeft, ChevronRight, Inbox, Search, SearchX, Trash2, X } from 'lucide-react-native'
-import { useMemo, useState } from 'react'
+import { ChevronLeft, ChevronRight, Copy, Pencil, Search, SearchX, Trash2, UserRound, X } from 'lucide-react-native'
+import { useCallback, useMemo, useRef, useState } from 'react'
 import { Animated, ScrollView, Text, TextInput, View } from 'react-native'
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable'
+import Reanimated, { interpolate, useAnimatedReaction, useAnimatedStyle, type SharedValue } from 'react-native-reanimated'
+import { scheduleOnRN } from 'react-native-worklets'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { Button } from '@/components/button'
 import { Chip } from '@/components/chip'
+import { LedgerArt } from '@/components/illustrations'
 import { Money } from '@/components/money'
 import { Press } from '@/components/press'
 import { CollapsingBar, EmptyState, GUTTER, LargeTitle, TAB_SCREEN_BOTTOM, useCollapsingHeader } from '@/components/screen'
-import { TransactionRow } from '@/components/transaction-row'
+import { RowPresence, useArrivals, type RowPresenceHandle } from '@/components/list-motion'
+import { RowMenu, type RowMenuItem } from '@/components/row-menu'
+import { TransactionRow, txTitle } from '@/components/transaction-row'
+import { haptic } from '@/lib/motion'
 import { useQuickLog } from '@/features/quick-log/provider'
 import { useProfile, useToday } from '@/lib/profile'
 import { useTheme } from '@/lib/theme'
@@ -37,7 +42,7 @@ function matches(t: TransactionView, f: Filter) {
 }
 
 export default function ActivityScreen() {
-  const { currency, grouping, timeZone } = useProfile()
+  const { currency, grouping, timeZone, userId } = useProfile()
   const today = useToday(timeZone)
   const [month, setMonth] = useState(() => monthRange(today).start)
   const { start, end } = monthRange(month)
@@ -74,11 +79,71 @@ export default function ActivityScreen() {
   const shownCount = sections.reduce((n, s) => n + s.data.length, 0)
   const isCurrentMonth = month === monthRange(today).start
 
-  const remove = async (tx: TransactionView) => {
-    await softDeleteTransaction(db, tx.id)
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success)
-    toast({ message: 'Deleted', onUndo: () => restoreTransaction(db, tx.id) })
+  // Rows register here so a delete (swipe, button or menu) can fold the row away before it goes.
+  const rowRefs = useRef(new Map<string, RowPresenceHandle>())
+  const ids = useMemo(() => rows.map((r) => r.id), [rows])
+  const fresh = useArrivals(ids, `${start}|${filter}|${q.trim()}`)
+  const [menu, setMenu] = useState<{ tx: TransactionView; at: { x: number; y: number } } | null>(null)
+
+  const remove = useCallback(
+    (tx: TransactionView) => {
+      // The toast shows at once; the write lands after the row has folded away. Undo waits for it.
+      let settle: (ok: boolean) => void = () => {}
+      const deleted = new Promise<boolean>((r) => (settle = r))
+      toast({
+        message: `Deleted · ${txTitle(tx)}`,
+        onUndo: async () => {
+          if (await deleted) await restoreTransaction(db, tx.id)
+        },
+      })
+      const del = async () => {
+        try {
+          await softDeleteTransaction(db, tx.id)
+          settle(true)
+        } catch {
+          settle(false)
+          rowRefs.current.get(tx.id)?.expand()
+          toast({ message: 'Couldn’t delete it. Please try again.', kind: 'error' })
+        }
+      }
+      const row = rowRefs.current.get(tx.id)
+      if (row) row.collapse(() => void del())
+      else void del()
+    },
+    [db, toast],
+  )
+  const duplicate = async (tx: TransactionView) => {
+    try {
+      const id = await createTransaction(db, userId, {
+        type: tx.type,
+        amount_minor: tx.amount_minor,
+        account_id: tx.account_id,
+        to_account_id: tx.to_account_id,
+        category_id: tx.category_id,
+        party_id: tx.party_id,
+        note: tx.note,
+        original_amount_minor: tx.original_amount_minor,
+        original_currency: tx.original_currency,
+        fx_rate: tx.fx_rate,
+        occurred_on: today,
+        occurred_at: new Date().toISOString(),
+      })
+      toast({ message: `Logged again today · ${txTitle(tx)}`, kind: 'success', onUndo: () => softDeleteTransaction(db, id) })
+    } catch {
+      toast({ message: 'Couldn’t duplicate it. Please try again.', kind: 'error' })
+    }
   }
+  const menuItems = (tx: TransactionView): RowMenuItem[] =>
+    EDITABLE.has(tx.type)
+      ? [
+          { label: 'Edit', icon: Pencil, onPress: () => quickLog.open({ edit: tx }) },
+          { label: 'Duplicate to today', icon: Copy, onPress: () => void duplicate(tx) },
+          { label: 'Delete', icon: Trash2, danger: true, onPress: () => remove(tx) },
+        ]
+      : [
+          ...(tx.party_id ? [{ label: 'Open person', icon: UserRound, onPress: () => router.push({ pathname: '/person', params: { id: tx.party_id! } }) }] : []),
+          { label: 'Delete', icon: Trash2, danger: true, onPress: () => remove(tx) },
+        ]
   const open = (tx: TransactionView) =>
     EDITABLE.has(tx.type) ? () => quickLog.open({ edit: tx }) : tx.party_id ? () => router.push({ pathname: '/person', params: { id: tx.party_id! } }) : undefined
   const clearFilters = () => {
@@ -178,47 +243,53 @@ export default function ActivityScreen() {
           const first = index === 0
           const last = index === section.data.length - 1
           return (
-            <ReanimatedSwipeable
-              friction={2}
-              rightThreshold={60}
-              overshootRight={false}
-              // Rows are separate views; the container's surface fill hides a subpixel seam between them.
-              containerStyle={first ? undefined : { marginTop: -1, paddingTop: 1, backgroundColor: colors.surface, borderBottomLeftRadius: last ? 18 : 0, borderBottomRightRadius: last ? 18 : 0 }}
-              renderRightActions={() => (
-                <Press
-                  accessibilityRole="button"
-                  accessibilityLabel="Delete"
-                  onPress={() => void remove(item)}
-                  feedback="soft"
-                  style={{ width: 80, alignItems: 'center', justifyContent: "center", backgroundColor: colors.danger }}
-                >
-                  <Trash2 size={19} color="#FFFFFF" />
-                  <Text style={{ color: '#FFFFFF', fontSize: 11.5, fontWeight: '600', marginTop: 3 }}>Delete</Text>
-                </Press>
-              )}
-              onSwipeableOpen={(direction) => {
-                if (direction === 'left') void remove(item)
+            <RowPresence
+              appear={fresh.has(item.id)}
+              ref={(h) => {
+                if (h) rowRefs.current.set(item.id, h)
+                else rowRefs.current.delete(item.id)
               }}
             >
-              <View
-                style={{
-                  backgroundColor: colors.surface,
-                  borderColor: colors.border,
-                  borderLeftWidth: 1,
-                  borderRightWidth: 1,
-                  borderTopWidth: first ? 1 : 0,
-                  borderBottomWidth: last ? 1 : 0,
-                  borderTopLeftRadius: first ? 18 : 0,
-                  borderTopRightRadius: first ? 18 : 0,
-                  borderBottomLeftRadius: last ? 18 : 0,
-                  borderBottomRightRadius: last ? 18 : 0,
-                  paddingHorizontal: 14,
+              <ReanimatedSwipeable
+                friction={1.6}
+                rightThreshold={56}
+                overshootRight={false}
+                // Rows are separate views; the container's surface fill hides a subpixel seam between them.
+                containerStyle={first ? undefined : { marginTop: -1, paddingTop: 1, backgroundColor: colors.surface, borderBottomLeftRadius: last ? 18 : 0, borderBottomRightRadius: last ? 18 : 0 }}
+                renderRightActions={(progress) => <DeleteAction progress={progress} first={first} last={last} onPress={() => remove(item)} />}
+                onSwipeableOpen={(direction) => {
+                  if (direction === 'left') remove(item)
                 }}
               >
-                {!first && <View style={{ height: 1, marginLeft: 52, backgroundColor: colors.borderSubtle }} />}
-                <TransactionRow tx={item} currency={currency} grouping={grouping} onPress={open(item)} />
-              </View>
-            </ReanimatedSwipeable>
+                <View
+                  style={{
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                    borderLeftWidth: 1,
+                    borderRightWidth: 1,
+                    borderTopWidth: first ? 1 : 0,
+                    borderBottomWidth: last ? 1 : 0,
+                    borderTopLeftRadius: first ? 18 : 0,
+                    borderTopRightRadius: first ? 18 : 0,
+                    borderBottomLeftRadius: last ? 18 : 0,
+                    borderBottomRightRadius: last ? 18 : 0,
+                    paddingHorizontal: 14,
+                  }}
+                >
+                  {!first && <View style={{ height: 1, marginLeft: 52, backgroundColor: colors.borderSubtle }} />}
+                  <TransactionRow
+                    tx={item}
+                    currency={currency}
+                    grouping={grouping}
+                    onPress={open(item)}
+                    onLongPress={(at) => {
+                      haptic.medium()
+                      setMenu({ tx: item, at })
+                    }}
+                  />
+                </View>
+              </ReanimatedSwipeable>
+            </RowPresence>
           )
         }}
         ListEmptyComponent={
@@ -236,13 +307,29 @@ export default function ActivityScreen() {
                   }
                 />
               ) : (
-                <EmptyState icon={<Inbox size={20} color={colors.textMuted} />} title={`No transactions in ${monthLabel(month)}`} description="Tap + to log one." />
+                <EmptyState
+                  art={<LedgerArt />}
+                  title={`No transactions in ${monthLabel(month)}`}
+                  description={isCurrentMonth ? 'Log what you spend as it happens — it takes a few seconds.' : 'Nothing was logged this month.'}
+                  action={
+                    isCurrentMonth ? (
+                      <Button variant="secondary" onPress={() => quickLog.open()}>
+                        Log an expense
+                      </Button>
+                    ) : (
+                      <Button variant="secondary" onPress={() => setMonth(monthRange(today).start)}>
+                        Back to this month
+                      </Button>
+                    )
+                  }
+                />
               )}
             </View>
           )
         }
       />
       <CollapsingBar title={`Activity · ${monthLabel(month)}`} {...header} />
+      <RowMenu at={menu?.at ?? null} title={menu ? txTitle(menu.tx) : undefined} items={menu ? menuItems(menu.tx) : []} onClose={() => setMenu(null)} />
     </View>
   )
 }
@@ -266,6 +353,42 @@ function SummaryCard({ income, expense, currency, grouping }: { income: number; 
         </View>
       ))}
     </View>
+  )
+}
+
+/** Swipe-to-delete action: the bin grows in as the row is pulled, with a tick once letting go will delete. */
+function DeleteAction({ progress, onPress, first, last }: { progress: SharedValue<number>; onPress: () => void; first: boolean; last: boolean }) {
+  const { colors } = useTheme()
+  useAnimatedReaction(
+    () => progress.value > 0.7,
+    (armed, was) => {
+      if (armed && was === false) scheduleOnRN(haptic.selection)
+    },
+  )
+  const icon = useAnimatedStyle(() => ({
+    opacity: interpolate(progress.value, [0.15, 0.6], [0, 1], 'clamp'),
+    transform: [{ scale: interpolate(progress.value, [0.15, 0.7, 1], [0.6, 1, 1.06], 'clamp') }],
+  }))
+  return (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel="Delete"
+      onPress={onPress}
+      feedback="soft"
+      style={{
+        width: 80,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: colors.danger,
+        borderTopRightRadius: first ? 18 : 0,
+        borderBottomRightRadius: last ? 18 : 0,
+      }}
+    >
+      <Reanimated.View style={[{ alignItems: 'center' }, icon]}>
+        <Trash2 size={19} color="#FFFFFF" />
+        <Text style={{ color: '#FFFFFF', fontSize: 11.5, fontWeight: '600', marginTop: 3 }}>Delete</Text>
+      </Reanimated.View>
+    </Press>
   )
 }
 

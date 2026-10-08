@@ -5,9 +5,11 @@ import { router, useLocalSearchParams } from 'expo-router'
 import { Sparkles, Wallet } from 'lucide-react-native'
 import { useEffect, useMemo } from 'react'
 import { Text, View } from 'react-native'
+import Animated from 'react-native-reanimated'
 import { Button } from '@/components/button'
 import { DueStrip } from '@/components/due-strip'
 import { HeroCard } from '@/components/hero-card'
+import { useArrivals, useListMotion } from '@/components/list-motion'
 import { Money } from '@/components/money'
 import { Press } from '@/components/press'
 import { RemindersCard } from '@/components/reminders-card'
@@ -63,6 +65,9 @@ export default function HomeScreen() {
     if (empty && loaded && !onboardedAt) router.replace('/onboarding')
   }, [empty, loaded, onboardedAt])
   const series = useMemo(() => balanceSeries(total, net, today, TREND_DAYS).map((p) => p.balance), [total, net, today])
+  const motion = useListMotion()
+  const todayIds = useMemo(() => todays.map((t) => t.id), [todays])
+  const arrived = useArrivals(todayIds, today)
   const spentToday = todays.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount_minor, 0)
 
   const hour = localHour(new Date(), timeZone)
@@ -112,9 +117,9 @@ export default function HomeScreen() {
           }
         />
       ) : (
-        <View style={{ borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 14 }}>
+        <Animated.View layout={motion.layout} style={{ borderRadius: 18, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, paddingHorizontal: 14, overflow: 'hidden' }}>
           {todays.map((tx, i) => (
-            <View key={tx.id}>
+            <Animated.View key={tx.id} entering={arrived.has(tx.id) ? motion.entering : undefined} exiting={motion.exiting} layout={motion.layout}>
               {i > 0 && <Divider inset={52} />}
               <TransactionRow
                 tx={tx}
@@ -128,9 +133,9 @@ export default function HomeScreen() {
                       : undefined
                 }
               />
-            </View>
+            </Animated.View>
           ))}
-        </View>
+        </Animated.View>
       )}
 
       {accounts.length > 0 && <RemindersCard />}

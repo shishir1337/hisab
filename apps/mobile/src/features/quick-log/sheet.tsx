@@ -152,12 +152,13 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
   const write = async (draft: TransactionDraft, label: string) => {
     if (editing && options.edit) {
       const before = options.edit
-      await updateTransaction(db, form.editingId!, draft)
+      const updated = updateTransaction(db, form.editingId!, draft)
       toast({
         haptic: false,
         message: `Updated · ${label}`,
-        onUndo: () =>
-          updateTransaction(db, before.id, {
+        onUndo: async () => {
+          await updated
+          await updateTransaction(db, before.id, {
             type: before.type,
             amount_minor: before.amount_minor,
             account_id: before.account_id,
@@ -170,12 +171,16 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
             original_amount_minor: before.original_amount_minor,
             original_currency: before.original_currency,
             fx_rate: before.fx_rate,
-          }),
+          })
+        },
       })
+      await updated
       return
     }
-    const id = await createTransaction(db, profile.userId, draft)
-    toast({ message: `Saved · ${label}`, onUndo: () => softDeleteTransaction(db, id), haptic: false })
+    // Toast first (the sheet is closing now); Undo waits for the insert to land.
+    const created = createTransaction(db, profile.userId, draft)
+    toast({ message: `Saved · ${label}`, onUndo: async () => softDeleteTransaction(db, await created), haptic: false })
+    await created
     if (draft.type === 'expense' && draft.category_id) {
       void checkBudgetAlerts(db, { category_id: draft.category_id, amount_minor: draft.amount_minor, occurred_on: draft.occurred_on }, profile.currency, profile.grouping, profile.hideAmounts).catch(() => {})
     }
@@ -231,9 +236,10 @@ export function QuickLogSheet({ options, onDone }: { options: OpenOptions; onDon
     const txLabel = options.edit ? txTitle(options.edit) : ''
     // Close first: the delete re-runs every live query, which would otherwise hold the sheet open.
     onDone()
+    const deleted = softDeleteTransaction(db, id)
+    toast({ message: `Deleted · ${txLabel}`, onUndo: async () => (await deleted, restoreTransaction(db, id)) })
     try {
-      await softDeleteTransaction(db, id)
-      toast({ message: `Deleted · ${txLabel}`, onUndo: () => restoreTransaction(db, id) })
+      await deleted
     } catch {
       toast({ message: 'Couldn’t delete it. Please try again.', kind: 'error' })
     }

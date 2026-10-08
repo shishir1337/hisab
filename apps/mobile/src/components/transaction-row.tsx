@@ -27,12 +27,15 @@ export function TransactionRow({
   currency,
   grouping,
   onPress,
+  onLongPress,
   showTime = true,
 }: {
   tx: TransactionView
   currency: string
   grouping: Grouping
   onPress?: () => void
+  /** Long-press (e.g. a context menu); gets the touch position. */
+  onLongPress?: (at: { x: number; y: number }) => void
   showTime?: boolean
 }) {
   const { colors } = useTheme()
@@ -52,8 +55,10 @@ export function TransactionRow({
     <Press
       accessibilityRole={onPress ? 'button' : undefined}
       accessibilityHint={onPress ? 'Opens to edit' : undefined}
-      disabled={!onPress}
+      disabled={!onPress && !onLongPress}
       onPress={onPress}
+      onLongPress={onLongPress ? (e) => onLongPress({ x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }) : undefined}
+      delayLongPress={380}
       style={{ flexDirection: 'row', alignItems: 'center', minHeight: 60, paddingVertical: 10 }}
     >
       {isTransfer ? (
