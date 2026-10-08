@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Appearance, StyleSheet, View } from 'react-native'
 import Animated, {
   runOnJS,
+  useFrameCallback,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -10,11 +11,11 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated'
-import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg'
-import { BRAND_COLORS, SPLASH_TILE_DP, TILE_RADIUS } from '@/lib/brand-geometry'
+import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg'
+import { BRAND_COLORS, H_PATH, SPLASH_TILE_DP, TILE_RADIUS } from '@/lib/brand-geometry'
 import { introPlan, type IntroPlan } from '@/lib/first-run-model'
 import { easing, spring, useMotion } from '@/lib/motion'
-import { BrandMark, Wordmark } from './brand'
+import { Wordmark } from './brand'
 
 /**
  * The app underneath mounts only once the intro has scheduled its motion (a frame or two after launch):
@@ -62,8 +63,8 @@ export function LaunchIntro({ ready, planReady, firstLaunch }: LaunchIntroProps)
   const [laidOut, setLaidOut] = useState(false)
   const [wordW, setWordW] = useState(0)
   const [plan, setPlan] = useState<IntroPlan | null>(null)
-  /** When the motion starts (the splash has finished fading). */
-  const t0 = useRef(0)
+  /** The opening has played to its minimum: the overlay may leave as soon as the app is ready. */
+  const [opened, setOpened] = useState(false)
   const exiting = useRef(false)
 
   const tileScale = useSharedValue(1)
@@ -72,16 +73,51 @@ export function LaunchIntro({ ready, planReady, firstLaunch }: LaunchIntroProps)
   const word = useSharedValue(0)
   const veil = useSharedValue(1)
   const lift = useSharedValue(1)
+  const gate = useSharedValue(0)
+  /** Set from JS once the plan is known: 0 = not yet, 1 = fade, 2 = short, 3 = full. */
+  const armed = useSharedValue(0)
+  const wordShift = useSharedValue(0)
+  const minMs = useSharedValue(0)
+  const smooth = useSharedValue(0)
+  const armedAt = useSharedValue(-1)
+  const started = useSharedValue(false)
 
   const onLayout = () => {
-    if (t0.current) return
+    if (laidOut) return
     SplashScreen.hide()
-    t0.current = Date.now() + SPLASH_FADE_MS
     setLaidOut(true)
   }
 
-  // Once laid out, the flags are read and the wordmark measured: schedule the whole timeline on the UI
-  // thread in one go, then let the app mount underneath (mounting keeps JS busy; the motion doesn't care).
+  const markOpened = () => setOpened(true)
+  /**
+   * The timeline starts on the UI thread, once frames are flowing smoothly (3 in a row under 40 ms). At
+   * startup the UI thread can be busy for a moment (native modules waking up); time-based animations
+   * would then jump to their end unseen. Waiting for smooth frames means the motion is actually shown.
+   */
+  const ticker = useFrameCallback((f) => {
+    'worklet'
+    if (!armed.value || started.value) return
+    if (armedAt.value < 0) armedAt.value = f.timestamp
+    smooth.value = (f.timeSincePreviousFrame ?? 999) < 40 ? smooth.value + 1 : 0
+    // Never wait forever for smooth frames.
+    if (smooth.value < 3 && f.timestamp - armedAt.value < 1500) return
+    started.value = true
+    const kind = armed.value
+    if (kind >= 2) {
+      const delay = SPLASH_FADE_MS
+      tileScale.value = withDelay(delay, withSequence(withTiming(kind === 3 ? 0.9 : 0.94, { duration: 120, easing: easing.inOut }), withSpring(1, spring.bouncy)))
+      sheen.value = withDelay(delay + 60, withTiming(1, { duration: kind === 3 ? 560 : 380, easing: easing.inOut }))
+      if (kind === 3 && wordShift.value) {
+        shift.value = withDelay(delay + 200, withSpring(wordShift.value, spring.gentle))
+        word.value = withDelay(delay + 250, withTiming(1, { duration: 340, easing: easing.out }))
+      }
+    }
+    gate.value = withTiming(1, { duration: (kind >= 2 ? SPLASH_FADE_MS : 0) + minMs.value }, (fin) => {
+      if (fin) runOnJS(markOpened)()
+    })
+  }, false)
+
+  // Once laid out, the flags are read and the wordmark measured: arm the timeline, then let the app mount.
   const [wordTimedOut, setWordTimedOut] = useState(false)
   useEffect(() => {
     if (!laidOut || wordW) return
@@ -92,33 +128,25 @@ export function LaunchIntro({ ready, planReady, firstLaunch }: LaunchIntroProps)
     if (!laidOut || !planReady || plan || (!wordW && !wordTimedOut)) return
     const p = introPlan(firstLaunch, reduced)
     setPlan(p)
-    if (p.kind !== 'fade') {
-      const lag = Math.max(0, t0.current - Date.now())
-      tileScale.value = withDelay(lag, withSequence(withTiming(0.92, { duration: 130, easing: easing.inOut }), withSpring(1, spring.bouncy)))
-      sheen.value = withDelay(lag + 80, withTiming(1, { duration: 540, easing: easing.inOut }))
-      if (p.wordmark && wordW) {
-        shift.value = withDelay(lag + 200, withSpring(-(wordW + GAP) / 2, spring.gentle))
-        word.value = withDelay(lag + 250, withTiming(1, { duration: 340, easing: easing.out }))
-      }
-    }
+    minMs.value = p.minMs
+    wordShift.value = p.wordmark && wordW ? -(wordW + GAP) / 2 : 0
+    armed.value = p.kind === 'full' ? 3 : p.kind === 'short' ? 2 : 1
+    ticker.setActive(true)
     releaseApp()
-  }, [laidOut, planReady, plan, wordW, wordTimedOut, firstLaunch, reduced, tileScale, sheen, shift, word])
+  }, [laidOut, planReady, plan, wordW, wordTimedOut, firstLaunch, reduced, minMs, wordShift, armed, ticker])
 
-  // Leave at the plan's minimum, or as soon as the app is ready after that.
+  // Leave once the opening has played and the app is ready.
   useEffect(() => {
     const p = plan
-    if (!ready || !p || exiting.current) return
-    const wait = Math.max(0, p.minMs - (Date.now() - t0.current))
-    const t = setTimeout(() => {
-      exiting.current = true
-      const finish = () => setDone(true)
-      veil.value = withTiming(0, { duration: p.exitMs, easing: easing.out }, (fin) => {
-        if (fin) runOnJS(finish)()
-      })
-      if (p.kind !== 'fade') lift.value = withTiming(1.06, { duration: p.exitMs, easing: easing.out })
-    }, wait)
-    return () => clearTimeout(t)
-  }, [plan, ready, veil, lift])
+    if (!ready || !opened || !p || exiting.current) return
+    exiting.current = true
+    ticker.setActive(false)
+    const finish = () => setDone(true)
+    veil.value = withTiming(0, { duration: p.exitMs, easing: easing.out }, (fin) => {
+      if (fin) runOnJS(finish)()
+    })
+    if (p.kind !== 'fade') lift.value = withTiming(1.06, { duration: p.exitMs, easing: easing.out })
+  }, [plan, ready, opened, veil, lift, ticker])
 
   // Safety net: never hold the app back or trap the user behind the intro (e.g. a stuck layout callback).
   useEffect(() => {
@@ -151,19 +179,32 @@ export function LaunchIntro({ ready, planReady, firstLaunch }: LaunchIntroProps)
     >
       <Animated.View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }, groupStyle]}>
         <Animated.View style={[{ width: TILE, height: TILE, borderRadius: (TILE * TILE_RADIUS) / 100, overflow: 'hidden' }, tileStyle]}>
-          <BrandMark size={TILE} scheme={scheme} />
+          {/* Layered so the sheen passes over the tile but under the glyph (identical to BrandMark at rest). */}
+          <Svg width={TILE} height={TILE} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
+            <Defs>
+              <LinearGradient id="intro-hl" x1="0" y1="0" x2="0" y2="1">
+                <Stop offset="0" stopColor="#FFFFFF" stopOpacity={scheme === 'light' ? 0.07 : 0} />
+                <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={0} />
+              </LinearGradient>
+            </Defs>
+            <Rect x={0} y={0} width={100} height={100} rx={TILE_RADIUS} fill={c.tile} />
+            <Rect x={0} y={0} width={100} height={100} rx={TILE_RADIUS} fill="url(#intro-hl)" />
+          </Svg>
           <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: -TILE * 0.2, bottom: -TILE * 0.2, width: SHEEN_W }, sheenStyle]}>
             <Svg width={SHEEN_W} height={TILE * 1.4}>
               <Defs>
                 <LinearGradient id="intro-sheen" x1="0" y1="0" x2="1" y2="0">
                   <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0} />
-                  <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={scheme === 'light' ? 0.22 : 0.7} />
+                  <Stop offset="0.5" stopColor="#FFFFFF" stopOpacity={scheme === 'light' ? 0.22 : 0.85} />
                   <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
                 </LinearGradient>
               </Defs>
               <Rect x={0} y={0} width={SHEEN_W} height={TILE * 1.4} fill="url(#intro-sheen)" />
             </Svg>
           </Animated.View>
+          <Svg width={TILE} height={TILE} viewBox="0 0 100 100" style={StyleSheet.absoluteFill}>
+            <Path d={H_PATH} fill={c.glyph} />
+          </Svg>
         </Animated.View>
         {/* Laid out beside the tile's centre position; slides out as the tile makes room. */}
         <View pointerEvents="none" style={{ position: 'absolute', left: '50%', marginLeft: TILE / 2 + GAP, top: 0, bottom: 0, justifyContent: 'center' }}>

@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { cssVariables, tokens, type ThemeColors, type ThemeName } from '@hisab/tokens'
+import * as SystemUI from 'expo-system-ui'
 import { vars, useColorScheme as useNativeWindScheme } from 'nativewind'
 import { createContext, use, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useColorScheme, View } from 'react-native'
@@ -43,6 +44,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     nativewind.setColorScheme(preference === 'system' ? 'system' : scheme)
   }, [preference, scheme, nativewind])
+
+  // The native root view shows through during transitions and keyboard resizes: keep it the page colour,
+  // so dark mode never flashes the light background set in app.json.
+  useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(tokens.color[scheme].page).catch(() => {})
+  }, [scheme])
 
   const value = useMemo<ThemeState>(
     () => ({

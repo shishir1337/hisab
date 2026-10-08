@@ -107,7 +107,7 @@ export function SignInHero({ width }: { width: number }) {
       {/* A second card peeking out behind gives the stack some depth. */}
       <Animated.View
         style={[
-          { position: 'absolute', top: 34, width: cardW - 44, height: 200, borderRadius: tokens.radius.hero, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+          { position: 'absolute', top: 30, width: cardW - 44, height: 252, borderRadius: tokens.radius.hero, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
           backStyle,
         ]}
       />
