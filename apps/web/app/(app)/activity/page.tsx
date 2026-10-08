@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { PageTransition } from '@/components/page-transition'
 import { ActivityTable } from '@/components/activity-table'
 import { PageHeader } from '@/components/page-header'
 
@@ -8,9 +9,11 @@ export const instant = false
 
 export default function ActivityPage() {
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <PageHeader title="Activity" description="Every entry, grouped by day." />
-      <ActivityTable />
-    </div>
+    <PageTransition>
+      <div className="mx-auto w-full max-w-6xl">
+        <PageHeader title="Activity" description="Every entry, grouped by day." />
+        <ActivityTable />
+      </div>
+    </PageTransition>
   )
 }

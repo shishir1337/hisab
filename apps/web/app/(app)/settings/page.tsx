@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { PageTransition } from '@/components/page-transition'
 import { PageHeader } from '@/components/page-header'
 import { SettingsView } from '@/components/settings-view'
 
@@ -8,9 +9,11 @@ export const instant = false
 
 export default function SettingsPage() {
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <PageHeader title="Settings" description="Accounts, preferences and your data." />
-      <SettingsView />
-    </div>
+    <PageTransition>
+      <div className="mx-auto w-full max-w-6xl">
+        <PageHeader title="Settings" description="Accounts, preferences and your data." />
+        <SettingsView />
+      </div>
+    </PageTransition>
   )
 }

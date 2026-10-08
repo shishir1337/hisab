@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { PageTransition } from '@/components/page-transition'
 import { Dashboard, HomeHeader } from '@/components/dashboard'
 
 export const metadata: Metadata = { title: 'Home' }
@@ -7,9 +8,11 @@ export const instant = false
 
 export default function HomePage() {
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <HomeHeader />
-      <Dashboard />
-    </div>
+    <PageTransition>
+      <div className="mx-auto w-full max-w-6xl">
+        <HomeHeader />
+        <Dashboard />
+      </div>
+    </PageTransition>
   )
 }

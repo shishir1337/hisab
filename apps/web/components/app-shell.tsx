@@ -4,7 +4,7 @@ import { BarChart3, Check, ChevronsUpDown, Eye, EyeOff, Home, ListOrdered, LogOu
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import { useSyncExternalStore, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 import { useQuickLog } from '@/components/quick-log/quick-log'
 import { SyncStatus } from '@/components/sync-pill'
 import { Avatar } from '@/components/ui/avatar'
@@ -34,6 +34,8 @@ function isActive(pathname: string, href: string) {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname()
   const quickLog = useQuickLog()
+  const side = useIndicator(pathname)
+  const tabs = useIndicator(pathname)
 
   return (
     <div className="flex min-h-dvh">
@@ -52,7 +54,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             N
           </Kbd>
         </button>
-        <nav className="flex flex-col gap-0.5" aria-label="Main">
+        <nav ref={side.nav} className="relative flex flex-col gap-0.5" aria-label="Main">
+          <span
+            ref={side.indicator}
+            aria-hidden
+            className="nav-indicator pointer-events-none absolute top-0 left-0 rounded-[10px] bg-surface opacity-0 shadow-[0_0_0_1px_var(--border),0_1px_2px_rgb(0_0_0/0.04)]"
+          />
           {NAV.map((item) => (
             <NavLink key={item.href} {...item} active={isActive(pathname, item.href)} />
           ))}
@@ -91,9 +98,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* Bottom tabs (phone width) */}
       <nav
+        ref={tabs.nav}
         aria-label="Main"
         className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-border bg-page/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-md backdrop-saturate-150 md:hidden"
       >
+        <span
+          ref={tabs.indicator}
+          aria-hidden
+          className="nav-indicator pointer-events-none absolute top-0 left-0 rounded-full bg-surface-muted opacity-0 shadow-[inset_0_0_0_1px_var(--border)]"
+        />
         {NAV.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href)
           return (
@@ -101,10 +114,13 @@ export function AppShell({ children }: { children: ReactNode }) {
               key={href}
               href={href}
               aria-current={active ? 'page' : undefined}
-              className={cn('flex h-16 flex-col items-center justify-center gap-1 text-[11px] transition-colors', active ? 'font-semibold text-text' : 'text-text-faint')}
+              className={cn(
+                'relative flex h-16 flex-col items-center justify-center gap-1 text-[11px] transition-colors duration-200 active:[&>span]:scale-90',
+                active ? 'font-semibold text-text' : 'text-text-faint',
+              )}
             >
-              <span className={cn('grid h-7 w-12 place-items-center rounded-full transition-colors duration-200', active && 'bg-surface-muted shadow-[inset_0_0_0_1px_var(--border)]')}>
-                <Icon className="size-[20px]" strokeWidth={active ? 2.2 : 1.8} />
+              <span data-indicator-anchor className="grid h-7 w-12 place-items-center rounded-full transition-transform duration-150 ease-out">
+                <Icon className={cn('size-[20px] transition-transform duration-300 ease-[var(--ease-spring)]', active && 'scale-105')} strokeWidth={active ? 2.2 : 1.8} />
               </span>
               {label}
             </Link>
@@ -134,15 +150,56 @@ function NavLink({ href, label, icon: Icon, active }: { href: string; label: str
     <Link
       href={href}
       aria-current={active ? 'page' : undefined}
+      data-indicator-anchor
       className={cn(
-        'flex h-9 items-center gap-3 rounded-[10px] px-2.5 text-[14px] transition-colors duration-150',
-        active ? 'bg-surface font-semibold text-text shadow-[0_0_0_1px_var(--border),0_1px_2px_rgb(0_0_0/0.04)]' : 'text-text-muted hover:bg-surface-muted hover:text-text',
+        'relative flex h-9 items-center gap-3 rounded-[10px] px-2.5 text-[14px] transition-colors duration-150',
+        active ? 'font-semibold text-text' : 'text-text-muted hover:bg-surface-muted hover:text-text',
       )}
     >
       <Icon className="size-[18px]" strokeWidth={active ? 2.2 : 1.8} />
       {label}
     </Link>
   )
+}
+
+/**
+ * One indicator per nav that slides to the active item (sidebar highlight, phone tab pill), instead of
+ * each item switching its own background. Measures the active `[data-indicator-anchor]`; first placement
+ * is instant.
+ */
+function useIndicator(pathname: string) {
+  const nav = useRef<HTMLElement>(null)
+  const indicator = useRef<HTMLSpanElement>(null)
+  useLayoutEffect(() => {
+    const n = nav.current
+    const el = indicator.current
+    if (!n || !el) return
+    const place = () => {
+      const target = n.querySelector<HTMLElement>('[aria-current="page"][data-indicator-anchor], [aria-current="page"] [data-indicator-anchor]')
+      if (!target || n.getClientRects().length === 0) {
+        el.style.opacity = '0'
+        return
+      }
+      const nr = n.getBoundingClientRect()
+      const tr = target.getBoundingClientRect()
+      const first = el.dataset.placed !== '1'
+      if (first) el.style.transition = 'none'
+      el.style.width = `${tr.width}px`
+      el.style.height = `${tr.height}px`
+      el.style.transform = `translate(${tr.left - nr.left - n.clientLeft}px, ${tr.top - nr.top - n.clientTop}px)`
+      el.style.opacity = '1'
+      if (first) {
+        void el.offsetWidth
+        el.style.transition = ''
+        el.dataset.placed = '1'
+      }
+    }
+    place()
+    const ro = new ResizeObserver(place)
+    ro.observe(n)
+    return () => ro.disconnect()
+  }, [pathname])
+  return { nav, indicator }
 }
 
 const subscribe = () => () => {}
